@@ -79,8 +79,13 @@ typings/
 # DynamoDB Local files
 .dynamodb/
 
-#mac os system file
-*/.DS_Store
+#os generated files
+.DS_Store
+.DS_Store?
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 
 #c binary
 *.o
