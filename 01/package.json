@@ -1,0 +1,14 @@
+{
+  "name": "01",
+  "version": "1.0.0",
+  "description": "craft your own language - 01",
+  "main": "play.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Gong Wenxue",
+  "license": "木兰开源协议",
+  "devDependencies": {
+    "@types/node": "^15.6.1"
+  }
+}

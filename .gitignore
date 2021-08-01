@@ -78,3 +78,9 @@ typings/
 
 # DynamoDB Local files
 .dynamodb/
+
+#mac os system file
+*/.DS_Store
+
+#c binary
+*.o
