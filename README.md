@@ -1,37 +1,29 @@
 # Craft A Language
 
 #### 介绍
-极客时间《手把手带你写一门计算机语言》课程示例代码。
+
+极客时间《手把手带你写一门计算机语言》课程示例代码
 
 #### 软件架构
-软件架构说明
+
+使用了 typescript 作为本项目的主要编程语言
+每一章节的课程对应了以章节编号为标题的子目录，每个目录中有 tsconfig 供使用 typescript 进行编译
 
 
 #### 安装教程
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+1.  从官网下载 Node.js 并安装（包括Nodejs的包管理工具 npm）
+2.  使用npm 全局安装typescript
 
 #### 使用说明
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+1.  进入某一节课程的目录 比如以第一节课程为例，进入子目录： `cd 01/`
+2.  根据当前目录中已有的tsconfig文件，执行编译： `tsc` 注意不要加特定文件名
+3.  在 01 目录中运行编译后的文件 `node play.js`
 
 #### 参与贡献
 
-1.  Fork 本仓库
-2.  新建 Feat_xxx 分支
-3.  提交代码
-4.  新建 Pull Request
+修复bug类的小修改，以 fork 后创建 pull request 方式为主，
+如果想提供另外的编程语言实现，我们正在讨论合适的项目目录结构，敬请期待
 
 
-#### 特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
