@@ -102,6 +102,17 @@ abstract class AstNode{
  * 其子类包括函数声明和函数调用
  */
 abstract class Statement extends AstNode{
+    static isStatementNode(node: any): node is Statement {
+        if (!node) {
+            return false;
+        }
+        if (Object.getPrototypeOf(node) == Statement.prototype) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
 }
 
 /**
@@ -145,6 +156,17 @@ class FunctionBody extends AstNode{
         super();
         this.stmts = stmts;
     }
+    static isFunctionBodyNode(node: any): node is FunctionBody {
+        if (!node) {
+            return false;
+        }
+        if (Object.getPrototypeOf(node) == FunctionBody.prototype) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
     public dump(prefix:string):void{
         console.log(prefix+"FunctionBody");
         this.stmts.forEach(x => x.dump(prefix+"\t"));
@@ -162,6 +184,17 @@ class FunctionCall extends Statement{
         super();
         this.name = name;
         this.parameters = parameters;
+    }
+    static isFunctionCallNode(node: any): node is FunctionCall {
+        if (!node) {
+            return false;
+        }
+        if (Object.getPrototypeOf(node) == FunctionCall.prototype) {
+            return true;
+        }
+        else {
+            return false;
+        }
     }
     public dump(prefix:string):void{
         console.log(prefix+"FunctionCall "+this.name + (this.definition!=null ? ", resolved" : ", not resolved"));
@@ -185,14 +218,14 @@ class Parser{
         while(true){  //每次循环解析一个语句
             //尝试一下函数声明
             stmt = this.parseFunctionDecl();
-            if (stmt != null){
+            if (Statement.isStatementNode(stmt)){
                 stmts.push(stmt);  
                 continue;
             }
             
             //如果前一个尝试不成功，那么再尝试一下函数调用
             stmt = this.parseFunctionCall();
-            if (stmt != null){
+            if (Statement.isStatementNode(stmt)){
                 stmts.push(stmt);  
                 continue; 
             }
@@ -222,7 +255,7 @@ class Parser{
                     let t2 = this.tokenizer.next();
                     if (t2.text==")"){
                         let functionBody = this.parseFunctionBody();
-                        if (functionBody != null){
+                        if (FunctionBody.isFunctionBodyNode(functionBody)){
                             //如果解析成功，从这里返回
                             return new FunctionDecl(t.text, functionBody);
                         }
@@ -255,7 +288,7 @@ class Parser{
         let t:Token = this.tokenizer.next();
         if(t.text == "{"){
             let functionCall = this.parseFunctionCall();
-            while(functionCall != null){  //解析函数体
+            while(FunctionCall.isFunctionCallNode(functionCall)){  //解析函数体
                 stmts.push(functionCall);
                 functionCall = this.parseFunctionCall();
             }
