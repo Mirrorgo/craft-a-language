@@ -479,7 +479,7 @@ void dumpFunctionType(Type * t){
 }
 
 FunctionType * createFunctionType(char* typeName, Type* returnType, int numParams, Type** paramTypes){
-    FunctionType* functionType = (FunctionType*)malloc(sizeof(SimpleType));
+    FunctionType* functionType = (FunctionType*)malloc(sizeof(FunctionType));
     functionType->numParams = numParams;
     functionType->paramTypes= paramTypes;
     
