@@ -106,11 +106,8 @@ abstract class Statement extends AstNode{
         if (!node) {
             return false;
         }
-        if (Object.getPrototypeOf(node) == Statement.prototype) {
-            return true;
-        }
         else {
-            return false;
+            return true;
         }
     }
 }
