@@ -413,6 +413,9 @@ class TypeChecker extends SemanticAstVisitor {
             else if (t1.LE(types_1.SysTypes.Number) && t2.LE(types_1.SysTypes.Number)) {
                 bi.theType = types_1.Type.getUpperBound(t1, t2);
             }
+            else if (t1 == types_1.SysTypes.Any || t2 == types_1.SysTypes.Any) {
+                bi.theType = types_1.SysTypes.Any;
+            }
             else {
                 this.addError("Operator '" + scanner_1.Op[bi.op] + "' can not be applied to '" + t1.name + "' and '" + t2.name + "'.", bi);
             }

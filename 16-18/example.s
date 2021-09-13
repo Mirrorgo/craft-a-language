@@ -6,31 +6,23 @@ _main:
 ## bb.0
     pushq	%rbp
     movq	%rsp, %rbp
-    subq	$16, %rsp
-    movl	$0, %eax
+    subq	$32, %rsp
+    movl	$10, %eax
     movl	%eax, -4(%rbp)
-LBB0_1:
     movl	-4(%rbp), %r10d
-    cmpl	$5, %r10d
-    jge	LBB0_3
-## bb.2
-    movl	%eax, -8(%rbp)
-    movl	%r10d, -12(%rbp)
-    movl	%r11d, -16(%rbp)
-    movl	%edi, -20(%rbp)
-    movl	-4(%rbp), %edi
+    imull	$2, %r10d
+    movl	%r10d, -8(%rbp)
+    movl	-4(%rbp), %r11d
+    addl	-8(%rbp), %r11d
+    movl	%eax, -12(%rbp)
+    movl	%r10d, -16(%rbp)
+    movl	%r11d, -20(%rbp)
+    movl	%r11d, %edi
     callq	_println
-    movl	-8(%rbp), %r10d
-    movl	-12(%rbp), %r11d
-    movl	-16(%rbp), %edi
-    movl	-20(%rbp), %esi
-    movl	-4(%rbp), %edi
-    movl	-4(%rbp), %esi
-    addl	$1, %edi
-    movl	%edi, -4(%rbp)
-    jmp	LBB0_1
-LBB0_3:
-    addq	$16, %rsp
+    movl	-12(%rbp), %r10d
+    movl	-16(%rbp), %r11d
+    movl	-20(%rbp), %edi
+    addq	$32, %rsp
     popq	%rbp
     retq
     .cfi_endproc

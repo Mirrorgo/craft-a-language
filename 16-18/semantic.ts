@@ -453,6 +453,7 @@ class TypeChecker extends SemanticAstVisitor{
 
         let t1 = bi.exp1.theType as Type;
         let t2 = bi.exp2.theType as Type;
+
         if (Operators.isAssignOp(bi.op)){
             bi.theType = t1;          
             if(!t2.LE(t1)){  //检查类型匹配
@@ -465,6 +466,9 @@ class TypeChecker extends SemanticAstVisitor{
             } 
             else if (t1.LE(SysTypes.Number) && t2.LE(SysTypes.Number)){
                 bi.theType = Type.getUpperBound(t1, t2);
+            }
+            else if (t1 == SysTypes.Any || t2 == SysTypes.Any){
+                bi.theType = SysTypes.Any;
             }
             else{
                 this.addError("Operator '" + Op[bi.op] + "' can not be applied to '"+t1.name+"' and '"+t2.name+"'." ,bi);

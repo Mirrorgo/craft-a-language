@@ -1189,7 +1189,7 @@ class MemAddress extends Oprand{
                 }
                 else{
                     //从Caller的栈里访问参数
-                    let offset = (varIndex - 6)*8 + 16;  //+16是因为有一个callq压入的返回地址，一个pushq rbp又加了8位
+                    let offset = (varIndex - 6)*8 + 16;  //+16是因为有一个callq压入的返回地址，一个pushq rbp又加了8个字节
                     newOprand = new MemAddress(Register.rbp,offset);        
                 }   
             }
@@ -1276,21 +1276,24 @@ class MemAddress extends Oprand{
         }
 
         //计算栈顶指针需要移动多少位置
-        //要保证栈顶指针除以16的余数等于8。
-        //这样，在调用callq的时候，会再把8个字节压到栈里，这样就会变成能够被16字节整除，也就是栈桢要能够16位对齐
+        //要保证栈桢16字节对齐
         if (!this.canUseRedZone){
-            this.rspOffset = paramsToSave*4 + this.numLocalVars*4 + this.usedCalleeProtectedRegs.length*4 + this.numArgsOnStack*8;
-            //当前占用的栈空间，包括在栈上保存的本地变量、Callee保护的寄存器占据的空间和栈上的参数
-            let rem = (this.rspOffset + this.saveCalleeProtectedRegs.length*8)%16;
-            if(rem == 0){
+            this.rspOffset = paramsToSave*4 + this.numLocalVars*4 + this.usedCallerProtectedRegs.length*4 + this.numArgsOnStack*8 + 16;
+            //当前占用的栈空间，还要加上Callee保护的寄存器占据的空间
+            let rem = (this.rspOffset + this.usedCalleeProtectedRegs.length*8)%16;
+            // console.log("this.rspOffset="+this.rspOffset);
+            // console.log("rem="+rem);
+
+            if(rem == 8){
                 this.rspOffset += 8;
             }
             else if ( rem == 4){
-                this.rspOffset += 4;
-            }
-            else if (rem == 12){
                 this.rspOffset += 12;
             }
+            else if (rem == 12){
+                this.rspOffset += 4;
+            }
+            // console.log("this.rspOffset="+this.rspOffset);
 
             if(this.rspOffset > 0)
                 newInsts.push(new Inst_2(OpCode.subq, new Oprand(OprandKind.immediate,this.rspOffset), Register.rsp));
