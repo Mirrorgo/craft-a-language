@@ -20,15 +20,19 @@ _foo:                                   ## @foo
 	movl	%r9d, -24(%rbp)
 	movl	-4(%rbp), %ecx
 	imull	-8(%rbp), %ecx
-	movl	-12(%rbp), %edx
-	imull	-16(%rbp), %edx
-	addl	%edx, %ecx
+	movl	%ecx, -28(%rbp)
+	movl	-12(%rbp), %ecx
+	imull	-16(%rbp), %ecx
+	movl	%ecx, -32(%rbp)
+	movl	-32(%rbp), %ecx
+	addl	-32(%rbp), %ecx
 	movl	-20(%rbp), %edx
 	imull	-24(%rbp), %edx
 	addl	%edx, %ecx
-	addl	16(%rbp), %ecx
-	addl	24(%rbp), %ecx
-	movl	%eax, -28(%rbp)                 ## 4-byte Spill
+	movl	16(%rbp), %edx
+	imull	24(%rbp), %edx
+	addl	%edx, %ecx
+	movl	%eax, -36(%rbp)                 ## 4-byte Spill
 	movl	%ecx, %eax
 	popq	%rbp
 	retq

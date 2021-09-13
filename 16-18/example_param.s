@@ -14,14 +14,19 @@ _foo:
     movl	%r9d, -24(%rbp)
     movl	-4(%rbp), %eax
     imull	-8(%rbp), %eax
+    movl	%eax, -28(%rbp)
     movl	-12(%rbp), %r10d
     imull	-16(%rbp), %r10d
-    addl	%r10d, %eax
-    movl	-20(%rbp), %r10d
-    imull	-24(%rbp), %r10d
-    addl	%r10d, %eax
-    addl	16(%rbp), %eax
-    addl	24(%rbp), %eax
+    movl	%r10d, -32(%rbp)
+    movl	-28(%rbp), %r11d
+    addl	-32(%rbp), %r11d
+    movl	-20(%rbp), %edi
+    imull	-24(%rbp), %edi
+    addl	%edi, %r11d
+    movl	16(%rbp), %edi
+    imull	24(%rbp), %edi
+    addl	%edi, %r11d
+    movl	%r11d, %eax
     popq	%rbp
     retq
     .cfi_endproc
