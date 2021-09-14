@@ -7,6 +7,7 @@
 */
 
 void println(int a);
+int tick();
 
 int fibonacci(int n){
     if (n <= 1){
@@ -18,5 +19,12 @@ int fibonacci(int n){
 }
 
 int main(){
-    println(fibonacci(30));
+    // println(fibonacci(30));
+    for (int n = 30; n <= 40; n++){
+        println(n);
+        int t1 = tick();
+        println(fibonacci(n));
+        int t2 = tick();
+        println(t2-t1);
+    }
 }

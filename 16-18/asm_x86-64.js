@@ -654,19 +654,22 @@ class AsmGenerator extends ast_1.AstVisitor {
     visitUnary(u) {
         let insts = this.getCurrentBB().insts;
         let oprand = this.visit(u.exp);
+        //用作返回值的Oprand
         let result = oprand;
         //++和--
         if (u.op == scanner_1.Op.Inc || u.op == scanner_1.Op.Dec) {
             let tempVar = new Oprand(OprandKind.varIndex, this.allocateTempVar());
             insts.push(new Inst_2(OpCode.movl, oprand, tempVar));
-            if (u.isPrefix) {
+            if (u.isPrefix) { //前缀运算符
                 result = tempVar;
             }
-            else {
+            else { //后缀运算符
+                //把当前操作数放入一个临时变量作为返回值
                 result = new Oprand(OprandKind.varIndex, this.allocateTempVar());
                 insts.push(new Inst_2(OpCode.movl, oprand, result));
                 this.s.deadTempVars.push(tempVar.value);
             }
+            //做+1或-1的运算
             let opCode = u.op == scanner_1.Op.Inc ? OpCode.addl : OpCode.subl;
             insts.push(new Inst_2(opCode, new Oprand(OprandKind.immediate, 1), tempVar));
             insts.push(new Inst_2(OpCode.movl, tempVar, oprand));
@@ -678,6 +681,7 @@ class AsmGenerator extends ast_1.AstVisitor {
         //-
         else if (u.op == scanner_1.Op.Minus) {
             let tempVar = new Oprand(OprandKind.varIndex, this.allocateTempVar());
+            //用0减去当前值
             insts.push(new Inst_2(OpCode.movl, new Oprand(OprandKind.immediate, 0), tempVar));
             insts.push(new Inst_2(OpCode.subl, oprand, tempVar));
             result = tempVar;

@@ -14,5 +14,13 @@ function fibonacci(n:number):number{
     }
 }
 
-println(fibonacci(30));
+// println(fibonacci(30));
+
+for (let n = 30; n <= 40; n++){
+    println(n);
+    let t1 = tick();
+    println(fibonacci(n));
+    let t2 = tick();
+    println(t2-t1);
+}
 

@@ -746,20 +746,23 @@ export class AsmGenerator extends AstVisitor{
 
         let oprand = this.visit(u.exp) as Oprand;
 
-        let result:Oprand = oprand;
+        //用作返回值的Oprand
+        let result:Oprand = oprand;  
 
         //++和--
         if(u.op == Op.Inc || u.op == Op.Dec){
             let tempVar = new Oprand(OprandKind.varIndex, this.allocateTempVar());
             insts.push(new Inst_2(OpCode.movl, oprand, tempVar));
-            if(u.isPrefix){
+            if(u.isPrefix){  //前缀运算符
                 result = tempVar;
             }
-            else{
+            else{  //后缀运算符
+                //把当前操作数放入一个临时变量作为返回值
                 result = new Oprand(OprandKind.varIndex, this.allocateTempVar());
                 insts.push(new Inst_2(OpCode.movl, oprand, result));
                 this.s.deadTempVars.push(tempVar.value);
             }
+            //做+1或-1的运算
             let opCode = u.op == Op.Inc ? OpCode.addl : OpCode.subl;
             insts.push(new Inst_2(opCode, new Oprand(OprandKind.immediate,1), tempVar));
             insts.push(new Inst_2(OpCode.movl, tempVar, oprand));
@@ -771,6 +774,7 @@ export class AsmGenerator extends AstVisitor{
         //-
         else if (u.op == Op.Minus){
             let tempVar = new Oprand(OprandKind.varIndex, this.allocateTempVar());
+            //用0减去当前值
             insts.push(new Inst_2(OpCode.movl, new Oprand(OprandKind.immediate,0), tempVar));
             insts.push(new Inst_2(OpCode.subl, oprand, tempVar));
             result = tempVar;
