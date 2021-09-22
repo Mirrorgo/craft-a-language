@@ -1580,40 +1580,41 @@ class MemAddress extends Oprand{
      * @param liveVars 
      */
     private getFreeRegister(liveVars:number[]):Register|null{
-        //1.首先，复用已经不活跃的变量的寄存器
-        //要把原来的varIndex删掉
         let result:Register|null = null;
-        for (let varIndex of this.loweredVars.keys()){
-            if (liveVars.indexOf(varIndex) == -1){
-                let oprand = this.loweredVars.get(varIndex) as Oprand;
-                if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)==-1){
-                    result = oprand as Register;
-                    this.loweredVars.delete(varIndex);
-                    break;
-                }
+
+        //1.从空余的寄存器中寻找一个。
+        let allocatedRegisters:Register[] = [];
+        this.loweredVars.forEach((oprand,varIndex)=>{
+            //已经lower了的每个变量，都会锁定一个寄存器。
+            if(oprand.kind == OprandKind.register){
+                allocatedRegisters.push(oprand as Register);
             }
-        }
+            else{
+                allocatedRegisters.push(this.spilledVars2Reg.get(varIndex) as Register);
+            }
+            });
         
-        //2.从空余的寄存器中寻找一个。
-        if (result == null){
-            let allocatedRegisters:Register[] = [];
-            this.loweredVars.forEach((oprand,varIndex)=>{
-                //已经lower了的每个变量，都会锁定一个寄存器。
-                if(oprand.kind == OprandKind.register){
-                    allocatedRegisters.push(oprand as Register);
-                }
-                else{
-                    allocatedRegisters.push(this.spilledVars2Reg.get(varIndex) as Register);
-                }
-             });
-            
-            for (let reg of Register.registers32){
-                if (allocatedRegisters.indexOf(reg) == -1 && this.reservedRegisters.indexOf(reg)==-1){
-                    result = reg;
-                    break;
-                }
+        for (let reg of Register.registers32){
+            if (allocatedRegisters.indexOf(reg) == -1 && this.reservedRegisters.indexOf(reg)==-1){
+                result = reg;
+                break;
             }
         }
+
+        //2.从已分配的varIndex里面找一个
+        // if (result == null){
+        //     for (let varIndex of this.loweredVars.keys()){
+        //         // todo 下面的逻辑是不安全的，在存在cfg的情况下，不能简单的判断变量是否真的没用了。
+        //         if (liveVars.indexOf(varIndex) == -1){
+        //             let oprand = this.loweredVars.get(varIndex) as Oprand;
+        //             if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)==-1){
+        //                 result = oprand as Register;
+        //                 this.loweredVars.delete(varIndex);
+        //                 break;
+        //             }
+        //         }
+        //     }
+        // }
         return result;
     }
 
