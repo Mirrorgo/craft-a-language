@@ -1310,7 +1310,7 @@ class MemAddress extends Oprand{
                 let jumpInst = lastInst as Inst_1;
                 let bbDest = jumpInst.oprand.value as BasicBlock;
                 jumpInst.oprand.value = bbDest.getName();
-                jumpInst.oprand.kind == OprandKind.label;
+                jumpInst.oprand.kind = OprandKind.label;
                 bbDest.isDestination = true;  //有其他block跳到这个block
             }
         }
