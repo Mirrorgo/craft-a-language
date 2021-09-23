@@ -14,7 +14,7 @@ const ast_1 = require("./ast");
 const console_1 = require("console");
 const scanner_1 = require("./scanner");
 const types_1 = require("./types");
-// import {TailAnalyzer, TailAnalysisResult} from './tail';
+const tail_1 = require("./tail");
 /**
  * 指令的编码
  */
@@ -121,6 +121,10 @@ var OpCode;
     //伪指令
     OpCode[OpCode["declVar"] = 180] = "declVar";
     OpCode[OpCode["reload"] = 181] = "reload";
+    OpCode[OpCode["tailRecursive"] = 182] = "tailRecursive";
+    OpCode[OpCode["tailCall"] = 183] = "tailCall";
+    OpCode[OpCode["tailRecursiveJmp"] = 184] = "tailRecursiveJmp";
+    OpCode[OpCode["tailCallJmp"] = 185] = "tailCallJmp";
 })(OpCode || (OpCode = {}));
 class OpCodeHelper {
     static isReturn(op) {
@@ -210,7 +214,8 @@ class Oprand {
     }
     toString() {
         if (this.kind == OprandKind.bb) {
-            return this.value;
+            let b = this.value;
+            return b.getName();
         }
         else if (this.kind == OprandKind.label) {
             return this.value;
@@ -366,6 +371,8 @@ class AsmGenerator extends ast_1.AstVisitor {
         this.returnSlot = new Oprand(OprandKind.returnSlot, -1);
         //一些状态变量
         this.s = new TempStates();
+        //尾递归和尾调用分析的结果
+        this.tailAnalysisResult = null;
     }
     /**
      * 分配一个临时变量的下标。尽量复用已经死掉的临时变量
@@ -415,6 +422,9 @@ class AsmGenerator extends ast_1.AstVisitor {
         this.asmModule = new AsmModule();
         this.s.functionSym = prog.sym;
         this.s.nextTempVarIndex = this.s.functionSym.vars.length;
+        //尾递归、尾调用分析
+        let tailAnalyzer = new tail_1.TailAnalyzer();
+        this.tailAnalysisResult = tailAnalyzer.visitProg(prog);
         //创建新的基本块
         this.newBlock();
         //遍历AST
@@ -423,6 +433,7 @@ class AsmGenerator extends ast_1.AstVisitor {
         (_b = this.asmModule) === null || _b === void 0 ? void 0 : _b.numTotalVars.set(this.s.functionSym, this.s.nextTempVarIndex);
         //重新设置状态变量
         this.s = new TempStates();
+        this.tailAnalysisResult = null;
         return this.asmModule;
     }
     visitFunctionDecl(functionDecl) {
@@ -449,15 +460,24 @@ class AsmGenerator extends ast_1.AstVisitor {
     /**
      * 把返回值mov到指定的寄存器。
      * 这里并不生成ret指令，而是在程序的尾声中处理。
-     * @param returnStatement
+     * @param rtnStmt
      */
-    visitReturnStatement(returnStatement) {
-        if (returnStatement.exp != null) {
-            let ret = this.visit(returnStatement.exp);
+    visitReturnStatement(rtnStmt) {
+        if (rtnStmt.exp != null) {
+            let ret = this.visit(rtnStmt.exp);
             //把返回值赋给相应的寄存器
             this.movIfNotSame(ret, this.returnSlot);
+            //分叉出一个额外的尾声块。
+            if (this.tailAnalysisResult != null) {
+                if (this.tailAnalysisResult.tailRecursives.indexOf(rtnStmt.exp) != -1) {
+                    this.getCurrentBB().insts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb, this.s.bbs[0]), "Tail Recursive Optimazation"));
+                }
+                else if (this.tailAnalysisResult.tailCalls.indexOf(rtnStmt.exp) != -1) {
+                    let functionName = rtnStmt.exp.name;
+                    this.getCurrentBB().insts.push(new Inst_1(OpCode.tailCallJmp, new Oprand(OprandKind.label, "_" + functionName), "Tail Call Optimazation"));
+                }
+            }
         }
-        // this.getCurrentBB().insts.push(new Inst_0(OpCode.retl));
     }
     visitIfStatement(ifStmt) {
         //条件
@@ -758,17 +778,42 @@ class AsmGenerator extends ast_1.AstVisitor {
         }
         let functionSym = functionCall.sym;
         let functionType = functionSym.theType;
-        insts.push(new Inst_1(OpCode.callq, new FunctionOprand(functionCall.name, args, functionType.returnType)));
-        //把结果放到一个新的临时变量里
-        let dest = undefined;
-        if (functionType.returnType != types_1.SysTypes.Void) { //函数有返回值时
-            dest = this.allocateTempVar();
-            insts.push(new Inst_2(OpCode.movl, this.returnSlot, dest));
+        //看看是不是尾递归或尾调用
+        let isTailCall = false;
+        let isTailRecursive = false;
+        if (this.tailAnalysisResult != null) {
+            if (this.tailAnalysisResult.tailRecursives.indexOf(functionCall) != -1) {
+                isTailRecursive = true;
+            }
+            else if (this.tailAnalysisResult.tailCalls.indexOf(functionCall) != -1) {
+                isTailCall = true;
+            }
         }
-        //调用函数完毕以后，要重新装载被Spilled的变量
-        //这个动作要在获取返回值之后
-        insts.push(new Inst_0(OpCode.reload));
-        return dest;
+        //对于尾递归和尾调用，使用一个伪指令
+        let op = OpCode.callq;
+        if (isTailRecursive) {
+            op = OpCode.tailRecursive;
+        }
+        else if (isTailCall) {
+            op = OpCode.tailCall;
+        }
+        insts.push(new Inst_1(op, new FunctionOprand(functionCall.name, args, functionType.returnType)));
+        //对于尾递归和尾调用，不需要处理返回值，也不需要做变量的溢出和重新装载
+        if (!isTailCall && !isTailRecursive) {
+            //把结果放到一个新的临时变量里
+            let dest = undefined;
+            if (functionType.returnType != types_1.SysTypes.Void) { //函数有返回值时
+                dest = this.allocateTempVar();
+                insts.push(new Inst_2(OpCode.movl, this.returnSlot, dest));
+            }
+            //调用函数完毕以后，要重新装载被Spilled的变量
+            //这个动作要在获取返回值之后
+            insts.push(new Inst_0(OpCode.reload));
+            return dest;
+        }
+        else {
+            return this.returnSlot;
+        }
     }
 }
 exports.AsmGenerator = AsmGenerator;
@@ -943,6 +988,8 @@ class MemAddress extends Oprand {
  */
 class Lower {
     constructor(asmModule, livenessResult) {
+        //当前的FunctionSymbol
+        this.functionSym = null;
         //当前函数使用到的那些Callee保护的寄存器
         this.usedCalleeProtectedRegs = [];
         //当前函数的参数数量
@@ -998,10 +1045,40 @@ class Lower {
             this.canUseRedZone = bytes < 128;
         }
         //添加序曲
+        //新增加一个BasicBlock
+        let bb = new BasicBlock();
+        bb.bbIndex == -1;
+        bbs.unshift(bb);
         bbs[0].insts = this.addPrologue(bbs[0].insts);
         //添加尾声
-        this.addEpilogue(bbs[bbs.length - 1].insts);
-        //基本块的标签和跳转指令。
+        let lastBB = bbs[bbs.length - 1];
+        let tailCall = lastBB.insts.length > 0 && lastBB.insts[lastBB.insts.length - 1].op == OpCode.tailCallJmp;
+        if (!tailCall) {
+            this.addEpilogue(bbs[bbs.length - 1].insts);
+        }
+        //为尾调用添加基本块和尾声代码
+        let additionalBBs = [];
+        for (let bb of bbs) {
+            if (bb.insts.length > 0) {
+                let lastInst = bb.insts[bb.insts.length - 1];
+                if (lastInst.op == OpCode.tailCallJmp) {
+                    bb.insts.pop();
+                    let bbEndPoint = new BasicBlock();
+                    additionalBBs.push(bbEndPoint);
+                    bb.insts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb, bbEndPoint), lastInst.comment));
+                    lastInst.op = OpCode.jmp;
+                    this.addEpilogue(bbEndPoint.insts, lastInst);
+                    console.log("bbEndPoint");
+                    for (let inst of bbEndPoint.insts) {
+                        console.log(inst);
+                    }
+                }
+            }
+        }
+        for (let bb of additionalBBs) {
+            bbs.push(bb);
+        }
+        //Lower基本块的标签和跳转指令。
         let newBBs = this.lowerBBLabelAndJumps(bbs, funIndex);
         //把spilledVars中的地址修改一下，加上CalleeProtectedReg所占的空间
         if (this.usedCalleeProtectedRegs.length > 0) {
@@ -1033,6 +1110,7 @@ class Lower {
      * @param functionSym
      */
     initStates(functionSym) {
+        this.functionSym = functionSym;
         this.usedCalleeProtectedRegs = [];
         this.numParams = functionSym.getNumParams();
         this.numArgsOnStack = 0;
@@ -1076,7 +1154,7 @@ class Lower {
         return newInsts;
     }
     //添加尾声
-    addEpilogue(newInsts) {
+    addEpilogue(newInsts, inst = new Inst_0(OpCode.retq)) {
         //恢复Callee负责保护的寄存器
         this.restoreCalleeProtectedRegs(newInsts);
         //缩小栈桢
@@ -1085,8 +1163,8 @@ class Lower {
         }
         //恢复rbp的值
         newInsts.push(new Inst_1(OpCode.popq, Register.rbp));
-        //返回
-        newInsts.push(new Inst_0(OpCode.retq));
+        //添加返回指令，或者是由尾调用产生的jump指令。
+        newInsts.push(inst);
     }
     //去除空的BasicBlock，给BasicBlock编号，把jump指令也lower
     lowerBBLabelAndJumps(bbs, funIndex) {
@@ -1119,12 +1197,18 @@ class Lower {
         for (let i = 0; i < newBBs.length; i++) {
             let insts = newBBs[i].insts;
             let lastInst = insts[insts.length - 1];
-            if (OpCodeHelper.isJump(lastInst.op)) { //jump指令
+            if (OpCodeHelper.isJump(lastInst.op) && lastInst.oprand.kind == OprandKind.bb) { //jump指令
                 let jumpInst = lastInst;
                 let bbDest = jumpInst.oprand.value;
-                jumpInst.oprand.value = bbDest.getName();
-                jumpInst.oprand.kind = OprandKind.label;
-                bbDest.isDestination = true; //有其他block跳到这个block
+                //去除不必要的jmp指令。如果仅仅是跳到下一个基本块，那么不需要这个jmp指令。
+                if (lastInst.op == OpCode.jmp && newBBs.indexOf(bbDest) == i + 1) {
+                    insts.pop();
+                }
+                else {
+                    jumpInst.oprand.value = bbDest.getName();
+                    jumpInst.oprand.kind = OprandKind.label;
+                    bbDest.isDestination = true; //有其他block跳到这个block
+                }
             }
         }
         return newBBs;
@@ -1158,7 +1242,7 @@ class Lower {
                 if (inst.op != OpCode.declVar) { //忽略变量声明的伪指令。
                     //处理函数调用
                     //函数调用前后，要设置参数；
-                    if (inst_1.op == OpCode.callq) {
+                    if (inst_1.op == OpCode.callq || inst_1.op == OpCode.tailRecursive || inst_1.op == OpCode.tailCall) {
                         let liveVarsAfterCall = (i == insts.length - 1)
                             ? this.livenessResult.initialVars.get(bb)
                             : this.livenessResult.liveVars.get(insts[i + 1]);
@@ -1198,6 +1282,7 @@ class Lower {
     lowerFunctionCall(inst_1, liveVars, liveVarsAfterCall, newInsts) {
         let functionOprand = inst_1.oprand;
         let args = functionOprand.args;
+        let saveCallerProtectedRegs = (inst_1.op == OpCode.callq);
         //需要在栈桢里为传参保留的空间
         let numArgs = args.length;
         if (numArgs > 6 && numArgs - 6 > this.numArgsOnStack) {
@@ -1208,13 +1293,14 @@ class Lower {
         let regsToSpill = [];
         //保护那些在函数调用之后，仍然会被使用使用的CallerProtected寄存器
         //将这些位置预留下来
-        for (let varIndex of liveVarsAfterCall) {
-            let oprand = this.loweredVars.get(varIndex);
-            if (oprand.kind == OprandKind.register &&
-                Register.callerProtected32.indexOf(oprand) != -1) {
-                varsToSpill.push(varIndex);
-                regsToSpill.push(oprand);
-                // this.reservedRegisters.push(oprand as Register);
+        if (saveCallerProtectedRegs) {
+            for (let varIndex of liveVarsAfterCall) {
+                let oprand = this.loweredVars.get(varIndex);
+                if (oprand.kind == OprandKind.register &&
+                    Register.callerProtected32.indexOf(oprand) != -1) {
+                    varsToSpill.push(varIndex);
+                    regsToSpill.push(oprand);
+                }
             }
         }
         //参数的位置要保留下来
@@ -1229,19 +1315,25 @@ class Lower {
         for (let j = 0; j < numArgs && j < 6; j++) {
             let source = this.lowerOprand(liveVars, args[j], newInsts);
             let regDest = Register.paramRegisters32[j];
-            let index = regsToSpill.indexOf(regDest);
-            if (index != -1) {
-                let varIndex = varsToSpill[index];
-                this.spillVar(varIndex, regDest, newInsts);
-                regsSpilled.push(regDest);
+            //如果是尾递归和尾调用，不需要保护寄存器
+            //实际上，这个时候如何计算活跃变量的集合，应该也会是空集
+            if (saveCallerProtectedRegs) {
+                let index = regsToSpill.indexOf(regDest);
+                if (index != -1) {
+                    let varIndex = varsToSpill[index];
+                    this.spillVar(varIndex, regDest, newInsts);
+                    regsSpilled.push(regDest);
+                }
             }
             if (regDest !== source)
                 newInsts.push(new Inst_2(OpCode.movl, source, regDest));
         }
-        //Spill剩余的寄存器
-        for (let i = 0; i < regsToSpill.length; i++) {
-            if (regsSpilled.indexOf(regsToSpill[i])) {
-                this.spillVar(varsToSpill[i], regsToSpill[i], newInsts);
+        if (saveCallerProtectedRegs) {
+            //Spill剩余的寄存器
+            for (let i = 0; i < regsToSpill.length; i++) {
+                if (regsSpilled.indexOf(regsToSpill[i])) {
+                    this.spillVar(varsToSpill[i], regsToSpill[i], newInsts);
+                }
             }
         }
         //超过6个之后的参数是放在栈桢里的，并要移动栈顶指针
@@ -1256,8 +1348,26 @@ class Lower {
                 newInsts.push(new Inst_2(OpCode.movl, oprand, new MemAddress(Register.rsp, offset)));
             }
         }
-        //调用函数，修改操作数为functionName
-        newInsts.push(inst_1);
+        // //lower操作数，处理尾递归和尾调用
+        // if(inst_1.op == OpCode.tailRecursive){
+        //     //找出第一个基本块
+        //     let bbs = this.asmModule.fun2Code.get(this.functionSym as FunctionSymbol) as BasicBlock[];
+        //     newInsts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb, bbs[0])));
+        // }
+        // else if (inst_1.op == OpCode.tailCall){
+        //     //把栈桢整个缩回来，让被调用的函数可以尽量复用当前的栈桢
+        //     newInsts.push(new Inst_2(OpCode.movl, Register.rbp, Register.rsp));
+        //     //继续做函数调用
+        //     newInsts.push(inst_1);
+        // }
+        // else{
+        //     //调用函数
+        //     newInsts.push(inst_1);
+        // }
+        //对于尾递归和尾调用，不生成call指令。而是去Lower在return语句中，生成的连个特殊的jmp指令。
+        if (inst_1.op != OpCode.tailRecursive && inst_1.op != OpCode.tailCall) {
+            newInsts.push(inst_1);
+        }
         //清除预留的寄存器
         this.reservedRegisters = [];
         return varsToSpill;
@@ -1276,16 +1386,27 @@ class Lower {
      */
     lowerOprand(liveVars, oprand, newInsts, noMemory = false) {
         let newOprand = oprand;
+        let aa = false;
+        let found = false;
         //变量
         if (oprand.kind == OprandKind.varIndex) {
             let varIndex = oprand.value;
+            if (varIndex == 0) {
+                console.log("varIndex == 0");
+                console.log(this.loweredVars);
+                aa = true;
+            }
             if (this.loweredVars.has(varIndex)) {
+                if (varIndex == 0) {
+                    console.log("varIndex == 0, find in lowered vars");
+                    found = true;
+                }
                 newOprand = this.loweredVars.get(varIndex);
                 if (noMemory && newOprand.kind == OprandKind.memory) {
                     newOprand = this.reloadVar(varIndex, newInsts);
                 }
             }
-            else { //返回寄存器
+            else {
                 let reg = this.getFreeRegister(liveVars);
                 if (reg == null) {
                     reg = this.spillARegister(newInsts);
@@ -1298,6 +1419,10 @@ class Lower {
             //因为返回值总是代码的最后一行，所以破坏掉里面的值也没关系
             newOprand = Register.eax;
         }
+        if (aa)
+            console.log(newOprand);
+        if (aa && !found)
+            console.log(this.loweredVars);
         return newOprand;
     }
     /**
@@ -1425,30 +1550,25 @@ function compileToAsm(prog, verbose) {
     //变量活跃性分析
     let livenessAnalyzer = new LivenessAnalyzer(asmModule);
     let result = livenessAnalyzer.execute();
-    if (verbose) {
-        console.log("liveVars");
-        for (let fun of asmModule.fun2Code.keys()) {
-            console.log("\nfunction: " + fun.name);
-            let bbs = asmModule.fun2Code.get(fun);
-            for (let bb of bbs) {
-                console.log("\nbb:" + bb.getName());
-                for (let inst of bb.insts) {
-                    let vars = result.liveVars.get(inst);
-                    console.log(vars);
-                    console.log(inst.toString());
-                }
-                console.log(result.initialVars.get(bb));
-            }
-        }
-    }
-    // Lower
-    let lower = new Lower(asmModule, result);
-    lower.lowerModule();
+    // if(verbose){
+    console.log("liveVars");
     for (let fun of asmModule.fun2Code.keys()) {
         console.log("\nfunction: " + fun.name);
         let bbs = asmModule.fun2Code.get(fun);
-        console.log(bbs);
+        for (let bb of bbs) {
+            console.log("\nbb:" + bb.getName());
+            for (let inst of bb.insts) {
+                let vars = result.liveVars.get(inst);
+                console.log(vars);
+                console.log(inst.toString());
+            }
+            console.log(result.initialVars.get(bb));
+        }
     }
+    // }
+    // Lower
+    let lower = new Lower(asmModule, result);
+    lower.lowerModule();
     let asm = asmModule.toString();
     if (verbose) {
         console.log("在Lower之后：");
