@@ -29,7 +29,7 @@ export class SemanticAnalyer{
         new LiveAnalyzer(),
         // new TypeConverter(),
         new LeftValueAttributor(),
-        new Trans()];
+    ];
 
     errors:CompilerError[] = [];   //语义错误
     warnings:CompilerError[] = []; //语义报警信息
@@ -896,9 +896,14 @@ class AssignAnalyzer extends SemanticAstVisitor{
  * 使用方法：针对每个函数调用visitFunctionDecl()
  */
 class LiveAnalyzer extends SemanticAstVisitor{ 
-    // visitProg(prog:Prog):any{
-    //     super.visitProg(prog);
-    // }
+    visitProg(prog:Prog):any{
+        let alive = super.visitBlock(prog);
+
+        //如果主程序没有return语句，那么在最后面加一下。
+        if (alive){
+            prog.stmts.push(new ReturnStatement(prog.endPos, prog.endPos, null));
+        }
+    }
 
     /**
      * 返回程序是否是alive的。
@@ -919,7 +924,7 @@ class LiveAnalyzer extends SemanticAstVisitor{
         if (alive){
             this.addError("Function lacks ending return statement and return type does not include 'undefined'.", functionDecl);
         }
-        return alive;
+        return true; //函数声明语句不要影响外层的语句
     }
 
     visitBlock(block:Block):any{
@@ -1009,20 +1014,5 @@ class LiveAnalyzer extends SemanticAstVisitor{
 
 }
 
-/////////////////////////////////////////////////////////////////////////
-// 自动添加return语句，以及其他导致AST改变的操作
-// todo 后面用数据流分析的方法
-
-class Trans extends SemanticAstVisitor{
-    visitProg(prog:Prog):any{
-        //在后面添加return语句
-        //TODO: 需要判断最后一个语句是不是已经是Return语句
-        prog.stmts.push(new ReturnStatement(prog.endPos, prog.endPos, null));
-    }
-
-    visitReturnStatement(stmt:ReturnStatement):any{
-
-    }
-}
 
 

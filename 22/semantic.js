@@ -807,9 +807,15 @@ class AssignAnalyzer extends SemanticAstVisitor {
  * 使用方法：针对每个函数调用visitFunctionDecl()
  */
 class LiveAnalyzer extends SemanticAstVisitor {
-    // visitProg(prog:Prog):any{
-    //     super.visitProg(prog);
-    // }
+    visitProg(prog) {
+        let alive = super.visitBlock(prog);
+        console.log("alive:");
+        console.log(alive);
+        //如果主程序没有return语句，那么在最后面加一下。
+        if (alive) {
+            prog.stmts.push(new ast_1.ReturnStatement(prog.endPos, prog.endPos, null));
+        }
+    }
     /**
      * 返回程序是否是alive的。
      * 如果每个分枝都有正确的return语句，那么返回false。否则，返回true。
@@ -828,7 +834,7 @@ class LiveAnalyzer extends SemanticAstVisitor {
         if (alive) {
             this.addError("Function lacks ending return statement and return type does not include 'undefined'.", functionDecl);
         }
-        return alive;
+        return true; //函数声明语句不要影响外层的语句
     }
     visitBlock(block) {
         let alive = true;
