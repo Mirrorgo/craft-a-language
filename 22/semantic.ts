@@ -805,13 +805,14 @@ class AssignAnalyzer extends SemanticAstVisitor{
         return false;  //表示代码活跃性为false
     }
 
+    //变量声明中可能会初始化变量
     visitVariableDecl(variableDecl: VariableDecl):any{
         if (variableDecl.init != null) this.visit(variableDecl.init);
         //如果有初始化部分，那么assigned就设置为true
         this.assignMode.set(variableDecl.sym as VarSymbol, variableDecl.init != null);
     }
 
-    //变量声明中可能会初始化变量
+    
     visitVariable(variable: Variable):any{
         let varSym = variable.sym as VarSymbol;
         if (this.assignMode.has(varSym)){
@@ -874,26 +875,23 @@ class AssignAnalyzer extends SemanticAstVisitor{
      * @param forStmt 
      */
     visitForStatement(forStmt:ForStatement):any{
+        //for循环语句的初始化部分也可能有
+        if (forStmt.init != null)
+            super.visit(forStmt.init);
+        
         //查看是否满足进入条件
-
-        if (forStmt.condition != null && typeof forStmt.condition.constValue != 'undefined'){
-            if (forStmt.condition.constValue){
-                return this.visit(forStmt.stmt);
-            }
-            else{ //如果不可能进入循环体，那么就不用继续遍历了
-                return true;
-            }
-        }
-        else{
-            return this.visit(forStmt.stmt);
+        let skipLoop = forStmt.condition != null && typeof forStmt.condition.constValue != 'undefined' && forStmt.condition.constValue;
+        if (!skipLoop){
+            this.visit(forStmt.stmt);
+            if (forStmt.increment!=null)
+                this.visit(forStmt.increment);
         }
     }
 
 }
 
 /**
- * 检查函数的所有分枝是否都会返回某个规定的值
- * 使用方法：针对每个函数调用visitFunctionDecl()
+ * 检查函数的所有分枝是否都正确的返回。
  */
 class LiveAnalyzer extends SemanticAstVisitor{ 
     

@@ -31,7 +31,6 @@ class SemanticAnalyer {
             new LiveAnalyzer(),
             // new TypeConverter(),
             new LeftValueAttributor(),
-            new Trans()
         ];
         this.errors = []; //语义错误
         this.warnings = []; //语义报警信息
@@ -724,13 +723,13 @@ class AssignAnalyzer extends SemanticAstVisitor {
             this.visit(rtnStmt.exp);
         return false; //表示代码活跃性为false
     }
+    //变量声明中可能会初始化变量
     visitVariableDecl(variableDecl) {
         if (variableDecl.init != null)
             this.visit(variableDecl.init);
         //如果有初始化部分，那么assigned就设置为true
         this.assignMode.set(variableDecl.sym, variableDecl.init != null);
     }
-    //变量声明中可能会初始化变量
     visitVariable(variable) {
         let varSym = variable.sym;
         if (this.assignMode.has(varSym)) {
@@ -788,37 +787,35 @@ class AssignAnalyzer extends SemanticAstVisitor {
      * @param forStmt
      */
     visitForStatement(forStmt) {
+        //for循环语句的初始化部分也可能有
+        if (forStmt.init != null)
+            super.visit(forStmt.init);
         //查看是否满足进入条件
-        if (forStmt.condition != null && typeof forStmt.condition.constValue != 'undefined') {
-            if (forStmt.condition.constValue) {
-                return this.visit(forStmt.stmt);
-            }
-            else { //如果不可能进入循环体，那么就不用继续遍历了
-                return true;
-            }
-        }
-        else {
-            return this.visit(forStmt.stmt);
+        let skipLoop = forStmt.condition != null && typeof forStmt.condition.constValue != 'undefined' && forStmt.condition.constValue;
+        if (!skipLoop) {
+            this.visit(forStmt.stmt);
+            if (forStmt.increment != null)
+                this.visit(forStmt.increment);
         }
     }
 }
 /**
- * 检查函数的所有分枝是否都会返回某个规定的值
- * 使用方法：针对每个函数调用visitFunctionDecl()
+ * 检查函数的所有分枝是否都正确的返回。
  */
 class LiveAnalyzer extends SemanticAstVisitor {
+    /**
+     * 分析主程序是否正确的renturn了。如果没有，那么自动添加return语句。
+     * @param prog
+     */
     visitProg(prog) {
         let alive = super.visitBlock(prog);
-        console.log("alive:");
-        console.log(alive);
         //如果主程序没有return语句，那么在最后面加一下。
         if (alive) {
             prog.stmts.push(new ast_1.ReturnStatement(prog.endPos, prog.endPos, null));
         }
     }
     /**
-     * 返回程序是否是alive的。
-     * 如果每个分枝都有正确的return语句，那么返回false。否则，返回true。
+     * 检查每个函数是否都正确的return了。也就是alive是false。
      * @param functionDecl
      */
     visitFunctionDecl(functionDecl) {
@@ -910,17 +907,5 @@ class LiveAnalyzer extends SemanticAstVisitor {
         else {
             return this.visit(forStmt.stmt);
         }
-    }
-}
-/////////////////////////////////////////////////////////////////////////
-// 自动添加return语句，以及其他导致AST改变的操作
-// todo 后面用数据流分析的方法
-class Trans extends SemanticAstVisitor {
-    visitProg(prog) {
-        //在后面添加return语句
-        //TODO: 需要判断最后一个语句是不是已经是Return语句
-        prog.stmts.push(new ast_1.ReturnStatement(prog.endPos, prog.endPos, null));
-    }
-    visitReturnStatement(stmt) {
     }
 }
