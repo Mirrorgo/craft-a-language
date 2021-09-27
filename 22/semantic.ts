@@ -896,6 +896,11 @@ class AssignAnalyzer extends SemanticAstVisitor{
  * 使用方法：针对每个函数调用visitFunctionDecl()
  */
 class LiveAnalyzer extends SemanticAstVisitor{ 
+    
+    /**
+     * 分析主程序是否正确的renturn了。如果没有，那么自动添加return语句。
+     * @param prog 
+     */
     visitProg(prog:Prog):any{
         let alive = super.visitBlock(prog);
 
@@ -906,8 +911,7 @@ class LiveAnalyzer extends SemanticAstVisitor{
     }
 
     /**
-     * 返回程序是否是alive的。
-     * 如果每个分枝都有正确的return语句，那么返回false。否则，返回true。
+     * 检查每个函数是否都正确的return了。也就是alive是false。
      * @param functionDecl 
      */
     visitFunctionDecl(functionDecl:FunctionDecl):any{
