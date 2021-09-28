@@ -21,6 +21,7 @@
  * variableStatement : 'let' variableDecl ';';
  * variableDecl : Identifier typeAnnotation？ ('=' expression)? ;
  * typeAnnotation : ':' typeName;
+ * typename : 'number' | 'boolean' | 'string' | 'any' | 'void' ;
  * functionDecl: "function" Identifier callSignature  block ;
  * callSignature: '(' parameterList? ')' typeAnnotation? ;
  * returnStatement: 'return' expression? ';' ;
