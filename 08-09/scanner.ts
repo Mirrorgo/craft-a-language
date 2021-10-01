@@ -13,7 +13,7 @@
  */
 
 //Token的类型
-export enum TokenKind {Keyword, Identifier, StringLiteral, IntegerLiteral, DecimalLiteral, NullLiteral, BooleanLiteral, Seperator, Operator, EOF};
+export enum TokenKind {Keyword, Identifier, StringLiteral, IntegerLiteral, DecimalLiteral, Seperator, Operator, EOF};
 
 // 代表一个Token的数据结构
 export class Token{
@@ -45,6 +45,7 @@ export class Position{
         this.line = line;
         this.col = col;
     }
+
     toString():string{
         return "(ln:"+this.line+", col:"+this.col + ", pos:" +this.begin+")";
     }
@@ -141,7 +142,15 @@ export class Scanner{
         ["interface",   Keyword.Interface], 
         ["package",     Keyword.Package],   
         ["protected",   Keyword.Protected],   
-        ["static",      Keyword.Static]
+        ["static",      Keyword.Static],
+        //类型
+        ["number",      Keyword.Number],
+        ["string",      Keyword.String],
+        ["boolean",     Keyword.Boolean],
+        ["any",         Keyword.Any],
+        ["symbol",      Keyword.Symbol],
+        //值
+        ["undefined",      Keyword.Undefined],
     ]); 
 
     constructor(stream:CharStream){
@@ -472,7 +481,7 @@ export class Scanner{
                 if (ch1 == '='){
                     this.stream.next();
                     let ch1 = this.stream.peek();
-                    if (ch1='='){
+                    if (ch1 == '='){
                         this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '===', pos, Op.IdentityEquals);
@@ -498,13 +507,12 @@ export class Scanner{
                 if (ch1 == '='){
                     this.stream.next();
                     let ch1 = this.stream.peek();
-                    if (ch1='='){
+                    if (ch1 == '='){
                         this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '!==', pos, Op.IdentityNotEquals);
                     }
                     else{
-                        this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '!=', pos, Op.NE);
                     }
@@ -667,21 +675,7 @@ export class Scanner{
             token.kind = TokenKind.Keyword;
             token.code = this.KeywordMap.get(token.text) as Keyword;
         }
-        //null
-        else if (token.text == 'null'){
-            token.kind = TokenKind.NullLiteral;
-            token.code = Keyword.Null;
-        }
-        //布尔型字面量
-        else if (token.text == 'true'){
-            token.kind = TokenKind.BooleanLiteral;
-            token.code = Keyword.True
-        }
-        else if (token.text == 'false'){
-            token.kind = TokenKind.BooleanLiteral;
-            token.code = Keyword.False
-        }
-        
+
         return token;
     }
 
@@ -839,4 +833,12 @@ export enum Keyword{
     Package,   
     Protected,   
     Static, 
+    //more
+    Any,
+    String,
+    Number,
+    Boolean,
+    Symbol,
+    //值
+    Undefined,
 }

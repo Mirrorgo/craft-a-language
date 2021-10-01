@@ -481,7 +481,7 @@ export class Scanner{
                 if (ch1 == '='){
                     this.stream.next();
                     let ch1 = this.stream.peek();
-                    if (ch1='='){
+                    if (ch1 == '='){
                         this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '===', pos, Op.IdentityEquals);
@@ -507,13 +507,12 @@ export class Scanner{
                 if (ch1 == '='){
                     this.stream.next();
                     let ch1 = this.stream.peek();
-                    if (ch1='='){
+                    if (ch1 == '='){
                         this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '!==', pos, Op.IdentityNotEquals);
                     }
                     else{
-                        this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '!=', pos, Op.NE);
                     }

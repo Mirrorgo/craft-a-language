@@ -45,6 +45,7 @@ export class Position{
         this.line = line;
         this.col = col;
     }
+
     toString():string{
         return "(ln:"+this.line+", col:"+this.col + ", pos:" +this.begin+")";
     }
@@ -142,7 +143,13 @@ export class Scanner{
         ["package",     Keyword.Package],   
         ["protected",   Keyword.Protected],   
         ["static",      Keyword.Static],
-        //其他
+        //类型
+        ["number",      Keyword.Number],
+        ["string",      Keyword.String],
+        ["boolean",     Keyword.Boolean],
+        ["any",         Keyword.Any],
+        ["symbol",      Keyword.Symbol],
+        //值
         ["undefined",      Keyword.Undefined],
     ]); 
 
@@ -474,7 +481,7 @@ export class Scanner{
                 if (ch1 == '='){
                     this.stream.next();
                     let ch1 = this.stream.peek();
-                    if (ch1='='){
+                    if (ch1 == '='){
                         this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '===', pos, Op.IdentityEquals);
@@ -500,13 +507,12 @@ export class Scanner{
                 if (ch1 == '='){
                     this.stream.next();
                     let ch1 = this.stream.peek();
-                    if (ch1='='){
+                    if (ch1 == '='){
                         this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '!==', pos, Op.IdentityNotEquals);
                     }
                     else{
-                        this.stream.next();
                         pos.end = this.stream.pos+1;
                         return new Token(TokenKind.Operator, '!=', pos, Op.NE);
                     }
@@ -669,31 +675,7 @@ export class Scanner{
             token.kind = TokenKind.Keyword;
             token.code = this.KeywordMap.get(token.text) as Keyword;
         }
-        // //null
-        // else if (token.text == 'null'){
-        //     token.kind = TokenKind.NullLiteral;
-        //     token.code = Keyword.Null;
-        // }
-        // //布尔型字面量
-        // else if (token.text == 'true'){
-        //     token.kind = TokenKind.BooleanLiteral;
-        //     token.code = Keyword.True
-        // }
-        // else if (token.text == 'false'){
-        //     token.kind = TokenKind.BooleanLiteral;
-        //     token.code = Keyword.False
-        // }
-        // //void
-        // else if (token.text == 'void'){
-        //     token.kind = TokenKind.VoidLiteral;
-        //     token.code = Keyword.Void;
-        // }
-        // //undefined
-        // else if (token.text == 'undefined'){
-        //     token.kind = TokenKind.UndefinedLiteral;
-        //     token.code = Keyword.Undefined;
-        // }
-        
+
         return token;
     }
 
@@ -853,5 +835,10 @@ export enum Keyword{
     Static, 
     //more
     Any,
+    String,
+    Number,
+    Boolean,
+    Symbol,
+    //值
     Undefined,
 }
