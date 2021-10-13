@@ -108,7 +108,7 @@ export enum SymKind{Variable, Function, Class, Interface, Parameter, Prog};
 
 /////////////////////////////////////////////////////////////////////////
 //一些系统内置的符号
-export let FUN_println = new FunctionSymbol("println", new FunctionType(SysTypes.Void,[SysTypes.String]),[new VarSymbol("a", SysTypes.String)]);
+export let FUN_println = new FunctionSymbol("println", new FunctionType(SysTypes.Void,[SysTypes.Number]),[new VarSymbol("a", SysTypes.String)]);
 export let FUN_tick = new FunctionSymbol("tick", new FunctionType(SysTypes.Integer,[]),[]);
 export let FUN_integer_to_string = new FunctionSymbol("integer_to_string", new FunctionType(SysTypes.String,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
 

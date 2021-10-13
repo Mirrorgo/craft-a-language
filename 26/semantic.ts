@@ -12,11 +12,11 @@
  * 
  */
 
-import {AstVisitor, AstNode, Block, Prog, Decl, VariableDecl, FunctionDecl, ParameterList, FunctionCall, Statement, Expression, ExpressionStatement, Binary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, ForStatement, Unary, CallSignature, BooleanLiteral, NullLiteral, VariableStatement, PredefinedTypeExp, ArrayPrimTypeExp, ParenthesizedPrimTypeExp, UnionOrIntersectionTypeExp, TypeReferenceExp, LiteralTypeExp} from './ast';
+import {AstVisitor, AstNode, Block, Prog, Decl, VariableDecl, FunctionDecl, ParameterList, FunctionCall, Statement, Expression, ExpressionStatement, Binary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, ForStatement, Unary, CallSignature, BooleanLiteral, NullLiteral, VariableStatement, PredefinedTypeExp, ArrayPrimTypeExp, ParenthesizedPrimTypeExp, UnionOrIntersectionTypeExp, TypeReferenceExp, LiteralTypeExp, TypeOfExp} from './ast';
 import {time, assert } from 'console';
 import {Symbol, SymKind, FunctionSymbol, VarSymbol, built_ins} from './symbol';
 import {Scope} from './scope';
-import {SysTypes, Type, FunctionType, ValueType, UnionType, TypeUtil, SimpleType, TypeKind, NamedType} from './types';
+import {SysTypes, Type, FunctionType, ValueType, UnionType, TypeUtil, SimpleType, TypeKind, NamedType, IntersectionType} from './types';
 import {Op, Operators, Keyword} from './scanner';
 import {CompilerError} from './error'
 import { CONFIG } from './config';
@@ -83,6 +83,7 @@ abstract class SemanticAstVisitor extends AstVisitor{
 class TypeResolver extends SemanticAstVisitor{
 
     visitVariableDecl(variableDecl:VariableDecl):any{
+        //这是第一次类型推导。后面还会基于数据流算法进行更精确的推导。
         if(variableDecl.typeExp != null){
             variableDecl.theType = this.visit(variableDecl.typeExp) as Type;
         }
@@ -505,9 +506,19 @@ class LeftValueAttributor extends SemanticAstVisitor{
 class TypeChecker extends SemanticAstVisitor{
 
     //每个变量动态的取值范围
-    // varRanges:Map<VarSymbol, Type> = new Map();
     varRanges:Map<VarSymbol, Type> = new Map();
 
+    //inIfCondition 用于标记条件表达式、逻辑表达式是不是在if条件里。
+    //在下面的例子中，必须把等值表达式"age != null"放在if条件里才能被语义分析程序所使用。如果把它放在外面，
+    //再用tsc --strict编译，仍然会报错。所以，编译器的智能程度还有待于进一步提升:)
+    // 
+    //    function foo8_1(age : number|null){
+    //        let age1 : string|number;
+    //        let b = age != null;
+    //        if (b){   
+    //            age1 = age;     //这里会报错
+    //        }
+    //    }  
     inIfCondition:boolean = false;
 
     //克隆
@@ -516,16 +527,6 @@ class TypeChecker extends SemanticAstVisitor{
         for (let sym of map1.keys()){
             let value = map1.get(sym) as Type;
             map2.set(sym,value);
-        }
-        return map2;
-    }
-
-    //把值域转化成补集
-    private notRange(map1:Map<VarSymbol, ValueType|UnionType>):Map<VarSymbol, Type>{
-        let map2:Map<VarSymbol, ValueType|UnionType> = new Map();
-        for (let sym of map1.keys()){
-            let value = map1.get(sym) as ValueType|UnionType;
-            map2.set(sym, TypeUtil.notOpOnType(value));
         }
         return map2;
     }
@@ -562,7 +563,7 @@ class TypeChecker extends SemanticAstVisitor{
             if (map2.has(sym)){
                 let t2 = map2.get(sym) as Type;
                 let t3 = TypeUtil.intersectTypes(t1,t2);
-                if (t3 != undefined)
+                if (t3 !== undefined)
                     map3.set(sym,t3 as Type);
             }
             else{ //map1有，而map2没有的变量
@@ -580,17 +581,17 @@ class TypeChecker extends SemanticAstVisitor{
     }
 
     //求值域的补集
-    private notOpOnRanges(map:Map<VarSymbol, ValueType|UnionType>):Map<VarSymbol, ValueType|UnionType>{
-        let map2:Map<VarSymbol, ValueType|UnionType> = new Map();
+    private getComplementRanges(map:Map<VarSymbol, Type>):Map<VarSymbol, Type>{
+        let map2:Map<VarSymbol, Type> = new Map();
         for (let sym of map.keys()){
             let t = map.get(sym) as ValueType|UnionType;
-            map2.set(sym,TypeUtil.notOpOnType(t));
+            map2.set(sym,TypeUtil.getComplementType(t));
         }
         return map2;
     }
 
 
-    //设置varSym的常量值。
+    //设置varSym的常量值。修改其值域。
     private setVarConstValue(varSym:VarSymbol, v:any){
         let t = TypeUtil.createTypeByValue(v);
         this.varRanges.set(varSym, t);
@@ -608,8 +609,8 @@ class TypeChecker extends SemanticAstVisitor{
 
     //获取表达式的类型。
     //如果表达式是变量，要从varRanges中去查询
-    private getExpType(exp:Expression):Type{
-        if(typeof (exp as Variable).sym == 'object'){
+    private getDynamicType(exp:Expression):Type{
+        if(exp instanceof Variable){
             let varSym = (exp as Variable).sym as VarSymbol;
             if (this.varRanges.has(varSym)){
                 return this.varRanges.get(varSym) as Type;
@@ -620,6 +621,14 @@ class TypeChecker extends SemanticAstVisitor{
         }
         else{
             return exp.theType as Type;
+        }
+    }
+
+    //显示调试信息
+    private dumpRange(map:Map<VarSymbol, Type>){
+        for (let sym of map.keys()){
+            let t = map.get(sym) as Type;
+            console.log(sym.name + " -> " + t.toString());
         }
     }
 
@@ -663,51 +672,69 @@ class TypeChecker extends SemanticAstVisitor{
             if (!TypeUtil.LE(t2,t1)){
                 this.addError("Operator '=' can not be applied to '"+t1.toString()+"' and '"+t2.toString()+"'." ,variableDecl);
             }
-
-            //设置变量的常量值
-            if (typeof c != 'undefined'){
+            else{
+                //设置变量的常量值
                 let varSym = variableDecl.sym as VarSymbol;
-                this.setVarConstValue(varSym, c);  //todo: 这里是否需要检查c2的类型？
+                let tRight:Type;  //右边的类型
+                if (c !== undefined){
+                    this.setVarConstValue(varSym, c);  //todo: 这里是否需要检查c2的类型？
+                    tRight = TypeUtil.getNamedTypeByValue(c);
+                }
+                else{ //设置值域
+                    tRight = this.getDynamicType(variableDecl.init);
+                    this.varRanges.set(varSym,tRight);
+                }
 
                 if (CONFIG.traceTypeChecker){
                     console.log("in variableDecl");
                     console.log(this.varRanges);
                 }
-            }
 
-            //类型推断：对于any类型，变成=号右边的具体类型
-            if (t1===SysTypes.Any){
-                variableDecl.theType = t2;   //TODO：此处要调整
-                // variableDecl.inferredType = t2;
-                //重点是把类型记入符号中，这样相应的变量声明就会获得准确的类型
-                //由于肯定是声明在前，使用在后，所以变量引用的类型是准确的。
-                (variableDecl.sym as VarSymbol).theType = t2;  
-            }
+                //第二次类型推导
+                //类型推导：如果变量声明没有带类型标注，则根据=号右边的表达式来推导类型
+                if (variableDecl.typeExp == null){
+                    tRight = TypeUtil.getBestCommonType(tRight);   //合并值类型
+                    variableDecl.theType = tRight;
+
+                    //由于肯定是声明在前，使用在后，所以变量引用的类型是准确的。
+                    (variableDecl.sym as VarSymbol).theType = t2;  
+                }
+                
+            } 
         }
     }
     
     visitBinary(bi:Binary):any{
-        // super.visitBinary(bi);
         let v1 = this.visit(bi.exp1);
         let v2 = this.visit(bi.exp2);
 
         let c1 = bi.exp1.constValue;
         let c2 = bi.exp2.constValue;
 
-        let t1 = bi.exp1.theType as Type;
-        let t2 = bi.exp2.theType as Type;
+        let t1 = this.getDynamicType(bi.exp1);
+        let t2 = this.getDynamicType(bi.exp2);     
 
         if (Operators.isAssignOp(bi.op)){
-            bi.theType = t1;          
-            if (!TypeUtil.overlap(t1,t2)){
-                this.addError("'"+t1.toString()+"' and '"+t2.toString()+"' have no overlap." ,bi);
-            }   
+            bi.theType = t1;    
+            t2 = this.getDynamicType(bi.exp2);    
             
-            //设置变量和节点的常量值
-            if (typeof c2 != 'undefined'){
-                let varSym = (bi.exp1 as Variable).sym as VarSymbol;
-                this.setVarConstValue(varSym, c2);  //todo: 这里是否需要检查c2的类型？
-                bi.constValue = c2;
+            //对于赋值运算来说，t1不需要用动态类型，用原来的类型就可以。赋值操作可以修改它的动态类型。
+            let t1_static = bi.exp1.theType as Type;
+            if (!TypeUtil.LE(t2,t1_static)){
+                this.addError("Can not assign '"+t2.toString()+"' to '"+t1.toString()+"'." ,bi);
+            }   
+            else{
+                //设置变量和节点的常量值
+                if (bi.exp1 instanceof Variable ){ //保护性的条件
+                    let varSym = bi.exp1.sym as VarSymbol;
+                    if (c2 !== undefined){
+                        if(this.inIfCondition) this.setVarConstValue(varSym, c2);  //todo: 这里是否需要检查c2的类型？
+                        bi.constValue = c2;
+                    }
+                    else{ //如果不是常量，那就把值域设置为右侧的值                        
+                        if(this.inIfCondition) this.varRanges.set(varSym, t1);
+                    }
+                }
 
                 if (CONFIG.traceTypeChecker){
                     console.log("in visitBinary, assignOP:");
@@ -721,7 +748,7 @@ class TypeChecker extends SemanticAstVisitor{
                 bi.theType = SysTypes.String;
                 
                 //计算常量值
-                if(typeof c1 != 'undefined' && typeof c2 != 'undefined'){
+                if(c1 !== undefined && c2 !== undefined){
                     bi.constValue = ""+c1+c2;
                 }
 
@@ -738,7 +765,7 @@ class TypeChecker extends SemanticAstVisitor{
                 bi.theType = SysTypes.Any;
 
                 //计算常量值                
-                if(typeof c1 != 'undefined' && typeof c2 != 'undefined'){
+                if(c1 !== undefined && c2 !== undefined){
                     bi.constValue = c1+c2;
                 }
             }
@@ -767,88 +794,115 @@ class TypeChecker extends SemanticAstVisitor{
                 this.addError("Operator '" + Op[bi.op] + "' can not be applied to '"+t1.toString()+"' and '"+t2.toString()+"'." ,bi);
             }
         }
-        else if (Operators.isRelationOp(bi.op)){
+        else if (bi.op == Op.EQ || bi.op == Op.NE || bi.op == Op.IdentityEquals || bi.op == Op.IdentityNotEquals){
             bi.theType = SysTypes.Boolean;
-            if (bi.op == Op.EQ || bi.op == Op.NE){
-                //需要两个集合有OverLap，也就是交集不为空
-                if(!TypeUtil.overlap(t1,t2)){
-                    this.addError("Operator '" + Op[bi.op] + "' can not be applied to '"+t1.toString()+"' and '"+t2.toString()+"'." ,bi);
-                }
-
-                //计算常量值
-                if(typeof c1 != 'undefined' && typeof c2 != 'undefined'){
-                    console.log("c1 and c2:");
-                    console.log(c1);
-                    console.log(c2);
-                    bi.constValue = bi.op == Op.EQ? c1==c2 : c1 != c2;
-                }
-
-                //计算值域
-                let range:any = undefined;
-                if(typeof (bi.exp1 as Variable).sym == 'object' && typeof c2 != 'undefined'){
-                    let varSym = (bi.exp1 as Variable).sym as VarSymbol;
-                    // let t = new ValueSet(t2 as NamedType,[c2], bi.op != Op.EQ);
-                    let t = TypeUtil.createTypeByValue(c2);
-                    t.isComplement = bi.op != Op.EQ;
-                    range = new Map();
-                    range.set(varSym, t);              
-                }
-                else if (typeof (bi.exp2 as Variable).sym == 'object' && typeof c1 != 'undefined'){
-                    let varSym = (bi.exp2 as Variable).sym as VarSymbol;
-                    // let t = new ValueSet(t1 as NamedType,[c1], bi.op != Op.EQ);
-                    let t = TypeUtil.createTypeByValue(c1);
-                    t.isComplement = bi.op != Op.EQ;
-                    range = new Map();
-                    range.set(varSym, t);
-                }
-
-                if (CONFIG.traceTypeChecker && typeof range != 'undefined'){
-                    console.log("in visitBinary, RalationOp '"+Op[bi.op]+"':");
-                    console.log(range);
-                }
-
-                return range;
-                
-            }
-            // > >= < <= 需要两边是Number
-            else{
-                if(TypeUtil.LE(t1, SysTypes.Number) && TypeUtil.LE(t2, SysTypes.Number)){
-                    //计算常量值
-                    if(typeof c1 == 'number' && typeof c2 == 'number'){
-                        switch(bi.op){
-                            case Op.G:
-                                bi.constValue = c1>c2;
-                                break;
-                            case Op.GE:
-                                bi.constValue = c1>=c2;
-                                break;
-                            case Op.L:
-                                bi.constValue = c1<c2;
-                                break;
-                            case Op.LE:
-                                bi.constValue = c1<=c2;
-                                break;
-                        }
-                    }
-                }
-                else{
-                    this.addError("Operator '" + Op[bi.op] + "' can not be applied to '"+t1.toString()+"' and '"+t2.toString()+"'." ,bi);
-                }
-            }
-        }
-        else if (Operators.isLogicalOp(bi.op)){
-            bi.theType = SysTypes.Boolean;
-            if (!TypeUtil.LE(t1,SysTypes.Boolean) && TypeUtil.LE(t2,SysTypes.Boolean)){
+            
+            //需要两个集合有OverLap，也就是交集不为空
+            if(!TypeUtil.overlap(t1,t2)){
                 this.addError("Operator '" + Op[bi.op] + "' can not be applied to '"+t1.toString()+"' and '"+t2.toString()+"'." ,bi);
             }
 
             //计算常量值
-            if(typeof c1 != 'undefined' && typeof c2 != 'undefined'){
+            if(c1 !== undefined && c2 !== undefined){
+                bi.constValue = (bi.op == Op.EQ || bi.op == Op.IdentityEquals)? c1==c2 : c1 != c2;
+            }
+
+            if(this.inIfCondition){
+                //计算值域
+                let range:any = undefined;
+                let c:any;
+                let varSym:VarSymbol|undefined;
+                let processed = false;
+
+                //一边是变量，一边具有常量的情况
+                if(bi.exp1 instanceof Variable && c2 !== undefined){
+                    varSym = (bi.exp1 as Variable).sym as VarSymbol;
+                    c = c2;            
+                }
+                else if (bi.exp2 instanceof Variable && c1 !== undefined){
+                    varSym = (bi.exp2 as Variable).sym as VarSymbol;
+                    c = c1;
+                }
+
+                if (varSym){
+                    let t = TypeUtil.createTypeByValue(c);
+                    t.isComplement = bi.op == Op.NE || bi.op == Op.IdentityNotEquals; 
+                    range = new Map();
+                    range.set(varSym, t);  
+                    processed = true;
+                }
+
+                //一边是typeOf表达式，一边是string常量的情况
+                if (!processed){
+                    let typeOfExp:TypeOfExp|undefined;
+                    let typeStr:string|undefined;
+                    if(bi.exp1 instanceof TypeOfExp && typeof c2 === 'string' ){
+                        typeOfExp = bi.exp1;
+                        typeStr = c2;
+                    }
+                    else if(bi.exp2 instanceof TypeOfExp && c1 === 'string'){
+                        typeOfExp = bi.exp2;
+                        typeStr = c1;
+                    }
+
+                    if (typeOfExp && typeOfExp.exp instanceof Variable){
+                        let t = TypeUtil.getNamedType(typeStr as string);
+                        if (t != SysTypes.Never ){
+                            varSym = (typeOfExp.exp as Variable).sym as VarSymbol;
+                            range = new Map();
+                            range.set(varSym, t);  
+                            processed = true;
+                        }
+                    }
+
+                }
+
+                if (CONFIG.traceTypeChecker && range !== undefined){
+                    console.log("in visitBinary, RalationOp '"+Op[bi.op]+"':");
+                    console.log(range);
+                }            
+
+                return range;      
+            }         
+        }
+
+        else if (Operators.isRelationOp(bi.op)){
+            bi.theType = SysTypes.Boolean;
+
+            // > >= < <= 需要两边是Number      
+            if (TypeUtil.isComparable(t1) && TypeUtil.isComparable(t2)){
+                //计算常量值
+                if(c1 !== undefined && c2 !== undefined){
+                    switch(bi.op){
+                        case Op.G:
+                            bi.constValue = c1>c2;
+                            break;
+                        case Op.GE:
+                            bi.constValue = c1>=c2;
+                            break;
+                        case Op.L:
+                            bi.constValue = c1<c2;
+                            break;
+                        case Op.LE:
+                            bi.constValue = c1<=c2;
+                            break;
+                    }
+                }
+            }
+            else{
+                this.addError("Operator '" + Op[bi.op] + "' can not be applied to '"+t1.toString()+"' and '"+t2.toString()+"'." ,bi);
+            }           
+        }
+        else if (Operators.isLogicalOp(bi.op)){
+            bi.theType = SysTypes.Boolean;
+
+            //计算常量值
+            if(c1 !== undefined && c2 !== undefined){
                 bi.constValue = bi.op == Op.And? c1&&c2 : c1 || c2;
             }
 
             //计算值域
-            if (typeof v1 == 'object' || typeof v2 == 'object'){
+            if (this.inIfCondition && (typeof v1 == 'object' || typeof v2 == 'object')){
                 let range1= typeof v1 == 'object'? v1 as Map<VarSymbol,ValueType|UnionType> : null;
                 let range2= typeof v2 == 'object'? v2 as Map<VarSymbol,ValueType|UnionType> : null;
                 let range:any = undefined;
@@ -866,7 +920,7 @@ class TypeChecker extends SemanticAstVisitor{
                         range = this.intersectRanges(range1, range2);
                     }
                 }
-                if (CONFIG.traceTypeChecker && typeof range != 'undefined'){
+                if (CONFIG.traceTypeChecker && range !== undefined){
                     console.log("in visitBinary, LogicalOp '"+Op[bi.op]+"':");
                     console.log(range);
                 }
@@ -879,20 +933,23 @@ class TypeChecker extends SemanticAstVisitor{
         }
     }
 
+
     visitUnary(u:Unary):any{
         // super.visitUnary(u);
         let v = this.visit(u.exp);
 
         let c = u.exp.constValue;
 
-        let t = u.exp.theType as Type;
+        // let t = u.exp.theType as Type;
+        let t = this.getDynamicType(u.exp);
+
         //要求必须是个左值
         if (u.op == Op.Inc || u.op == Op.Dec){
             if (TypeUtil.LE(t,SysTypes.Number)){
                 u.theType = t;
 
                 //设置常量值
-                if(typeof u.exp.constValue != 'undefined'){
+                if(u.exp.constValue !== undefined){
                     let varSym = (u.exp as Variable).sym as VarSymbol;
                     if (typeof c == 'number'){
                         //更新变量的常量值
@@ -915,7 +972,7 @@ class TypeChecker extends SemanticAstVisitor{
                 u.theType = t;
 
                 //设置常量值
-                if(typeof u.exp.constValue != 'undefined'){
+                if(u.exp.constValue !== undefined){
                     if (typeof c == 'number'){
                         u.constValue = u.op == Op.Plus? c : -c;
                     }
@@ -930,21 +987,24 @@ class TypeChecker extends SemanticAstVisitor{
                 u.theType = t;
 
                 //设置常量值
-                if(!u.exp.isErrorNode && typeof u.exp.constValue != 'undefined'){
-                    if (typeof c != 'undefined'){
-                        u.constValue = !c;
-                    }
+                if(!u.exp.isErrorNode && u.exp.constValue !== undefined && c !== undefined){
+                    u.constValue = !c;
                 }
 
                 //修改值域
-                if(typeof v == 'object'){
-                    let range = this.notOpOnRanges(v as Map<VarSymbol,ValueType|UnionType>);
+                if(this.inIfCondition){
+                    if (typeof v == 'object'){
+                        let range = this.getComplementRanges(v as Map<VarSymbol,ValueType|UnionType>);
 
-                    if (CONFIG.traceTypeChecker){
-                        console.log("in visitBinary, RalationOp");
-                        console.log(range);
+                        if (CONFIG.traceTypeChecker){
+                            console.log("in visitBinary, RalationOp");
+                            console.log(range);
+                        }
+                        return range;
                     }
-                    return range;
+                    else{
+
+                    }
                 }
 
             }
@@ -958,6 +1018,50 @@ class TypeChecker extends SemanticAstVisitor{
     }
 
     /**
+     * 根据动态类型，计算出typeof的值。
+     * 这些类型，有些是能在编译期确定的，有些不能。
+     * @param typeOfExp 
+     */
+    visitTypeOfExp(typeOfExp:TypeOfExp):any{
+        //计算出基础类型
+        let theType = this.getDynamicType(typeOfExp.exp);    //获取动态的值域（或叫做类型）
+        theType = TypeUtil.getBestCommonType(theType);  //如果是ValueType或UnionType，转换成NamedType
+        
+        //根据基础类型信息，设置constValue
+        if(theType.kind == TypeKind.Named){
+            switch(theType){
+                case SysTypes.String:
+                    typeOfExp.constValue = 'string';
+                    break;
+                case SysTypes.Boolean:
+                    typeOfExp.constValue = 'boolean';
+                    break;
+                case SysTypes.Integer:
+                case SysTypes.Decimal:
+                case SysTypes.Number:
+                    typeOfExp.constValue = 'number';
+                    break;
+                case SysTypes.Null:
+                    typeOfExp.constValue = 'object';
+                    break;
+                case SysTypes.Undefined:
+                    //如果一个变量的类型是any，那么当它第一次赋值以后，其动态类型就会改变。
+                    //如果这里获取的仍然是any，说明还没有被赋值，所以是undefined。
+                    //其他变量，如果允许取值为undefined，那么其动态类型也是undefined。
+                    //let b:number|undefined;
+                    //console.log(typeof b);
+                case SysTypes.Any:        
+                    typeOfExp.constValue = 'undefined';
+                    break;
+                default:
+                    console.log("Unsupported type in Typechecker.visitTypeOfExp:"+theType.toString());
+
+            }
+        }
+
+    }
+
+    /**
      * 用符号的类型（也就是变量声明的类型），来标注本节点
      * @param v 
      */
@@ -967,7 +1071,7 @@ class TypeChecker extends SemanticAstVisitor{
 
             //如果变量当前的值是个常量，那么就把常量传播出去
             let c = this.getVarConstValue(v.sym);
-            if (c != undefined){
+            if (c !== undefined){
                 v.constValue = c;
             }
         }
@@ -990,10 +1094,8 @@ class TypeChecker extends SemanticAstVisitor{
                 this.visit(functionCall.arguments[i]);
                 if (i < functionType.paramTypes.length){
                     // let t1 = functionCall.arguments[i].theType as Type;
-                    let t1 = this.getExpType(functionCall.arguments[i]);
+                    let t1 = this.getDynamicType(functionCall.arguments[i]);
                     let t2 = functionType.paramTypes[i] as Type;
-                    console.log("in visitFunctionCall, t1:");
-                    console.log(t1);
                     if (!TypeUtil.LE(t1,t2)){
                     // if (!TypeUtil.LE(t1,t2) && t2 !== SysTypes.String){
                         this.addError("Argument " + i + " of FunctionCall '" + functionCall.name + "' is of Type " + t1.toString() + ", while expecting "+t2.toString(), functionCall);
@@ -1014,12 +1116,30 @@ class TypeChecker extends SemanticAstVisitor{
         let ranges = this.visit(ifStmt.condition);
         this.inIfCondition = false;
 
+        //基于真值判断来做窄化
+        //对于if(a)的情况
+        if(ifStmt.condition instanceof Variable){  
+            if (ranges === undefined) ranges = new Map<Symbol, Type>();
+            let varSym = ifStmt.condition.sym as VarSymbol;
+            let t = TypeUtil.getTruethfulConditions(varSym.theType);
+            ranges.set(varSym, t);   
+            // this.dumpRange(ranges);
+        }
+        //对于if(!a)的情况
+        else if (ifStmt.condition instanceof Unary && ifStmt.condition.op == Op.Not && ifStmt.condition.exp instanceof Variable){
+            if (ranges === undefined) ranges = new Map<Symbol, Type>();
+            let varSym = ifStmt.condition.exp.sym as VarSymbol;
+            let t = TypeUtil.getTruethfulConditions(varSym.theType);
+            t = TypeUtil.getComplementType(t);  //取补集
+            ranges.set(varSym, t);   
+        }
+
         //访问Then部分
         if (typeof ranges == 'object'){
-            console.log("lastVarRanges");
-            console.log(lastVarRanges);
-            console.log("ranges");
-            console.log(ranges);
+            // console.log("\nlastVarRanges");
+            // this.dumpRange(lastVarRanges);
+            // console.log("ranges");
+            // this.dumpRange(ranges);
 
             let r1 = ranges as Map<Symbol, Type>;
             for (let varSym of r1.keys()){
@@ -1028,20 +1148,19 @@ class TypeChecker extends SemanticAstVisitor{
                 }
             }
 
-            console.log("this.varRanges");
-            console.log(this.varRanges);
+            // console.log("\nthis.varRanges");
+            // this.dumpRange(this.varRanges);
 
             let ranges1 = this.intersectRanges(this.varRanges, ranges);
             if (typeof ranges1 == 'object'){
                 this.varRanges = ranges1;
 
-                console.log("this.varRanges2");
-                console.log(this.varRanges);
+                // console.log("\nthis.varRanges2");
+                // this.dumpRange(this.varRanges);
 
                 if (CONFIG.traceTypeChecker){
                     console.log("in visitIfStatement, before entering Then block, this.varRanges=");
-                    console.log("this.varRanges2");
-                    console.log(this.varRanges);
+                    this.dumpRange(this.varRanges);
                 }
             }
         }
@@ -1050,7 +1169,7 @@ class TypeChecker extends SemanticAstVisitor{
         //访问Else部分，要把所有的条件取补集
         if (ifStmt.elseStmt != null){
             if (typeof ranges == 'object'){
-                let ranges1 = this.notOpOnRanges(ranges);
+                let ranges1 = this.getComplementRanges(ranges);
                 let ranges2 = this.intersectRanges(lastVarRanges, ranges1);
 
                 if (typeof ranges2 == 'object'){
@@ -1140,7 +1259,7 @@ class ConstFolder extends SemanticAstVisitor{
         let v1 = bi.exp1.constValue;
         let v2 = bi.exp2.constValue;
         if (Operators.isAssignOp(bi.op)){
-            if (typeof v2 != 'undefined'){
+            if (v2 !== undefined){
                 if (bi.op == Op.Assign){ //暂时只支持=号
                     bi.exp1.constValue = v1;
                     bi.constValue = v1;              
@@ -1150,7 +1269,7 @@ class ConstFolder extends SemanticAstVisitor{
                 }
             }
         }
-        else if(typeof v1 != 'undefined' && typeof v2 != 'undefined'){
+        else if(v1 !== undefined && v2 !== undefined){
             let v:any;
             switch(bi.op){
                 case Op.Plus: //'+'
@@ -1201,7 +1320,7 @@ class ConstFolder extends SemanticAstVisitor{
 
     visitUnary(u:Unary):any{
         let v1 = u.exp.constValue;
-        if (typeof v1 != 'undefined'){
+        if (v1 !== undefined){
             if (u.op == Op.Inc){
                 if (u.isPrefix){
                     u.exp.constValue += 1;
@@ -1323,8 +1442,8 @@ class AssignAnalyzer extends SemanticAstVisitor{
     visitBinary(binary:Binary):any{
         if (Operators.isAssignOp(binary.op)){
             this.visit(binary.exp2); //表达式右侧要照常遍历，但左侧就没有必要了。
-            if (typeof (binary.exp1 as Variable).sym == 'object'){
-                let varSym = (binary.exp1 as Variable).sym as VarSymbol;
+            if (binary.exp1 instanceof Variable){
+                let varSym = binary.exp1.sym as VarSymbol;
                 this.assignMode.set(varSym, true);
             }
         }
@@ -1335,7 +1454,7 @@ class AssignAnalyzer extends SemanticAstVisitor{
 
     visitIfStatement(ifStmt:IfStatement):any{
         //if条件有没有常量的值，是否为常真或常假
-        if (typeof ifStmt.condition.constValue != 'undefined'){
+        if (ifStmt.condition.constValue !== undefined){
             if (ifStmt.condition.constValue){
                 
             }
@@ -1372,8 +1491,8 @@ class AssignAnalyzer extends SemanticAstVisitor{
         if (forStmt.init != null)
             super.visit(forStmt.init);
         
-        //查看是否满足进入条件
-        let skipLoop = forStmt.condition != null && typeof forStmt.condition.constValue != 'undefined' && forStmt.condition.constValue;
+        //查看是否满足跳过loop的条件
+        let skipLoop = forStmt.condition != null && forStmt.condition.constValue !== undefined  && !forStmt.condition.constValue;
         if (!skipLoop){
             this.visit(forStmt.stmt);
             if (forStmt.increment!=null)
@@ -1465,7 +1584,7 @@ class LiveAnalyzer extends SemanticAstVisitor{
         let alive:boolean;
 
         //if条件有没有常量的值，是否为常真或长假
-        if (typeof ifStmt.condition.constValue != 'undefined'){
+        if (ifStmt.condition.constValue){
             if (ifStmt.condition.constValue){
                 alive = this.visit(ifStmt.stmt) as boolean;
             }
@@ -1491,19 +1610,20 @@ class LiveAnalyzer extends SemanticAstVisitor{
      * @param forStmt 
      */
     visitForStatement(forStmt:ForStatement):any{
-        //查看是否满足进入条件
+        // //查看是否满足进入条件
 
-        if (forStmt.condition != null && typeof forStmt.condition.constValue != 'undefined'){
-            if (forStmt.condition.constValue){
-                return this.visit(forStmt.stmt);
-            }
-            else{ //如果不可能进入循环体，那么就不用继续遍历了
-                return true;
-            }
-        }
-        else{
-            return this.visit(forStmt.stmt);
-        }
+        // if (forStmt.condition && forStmt.condition.constValue){
+        //     if (forStmt.condition.constValue){
+        //         return this.visit(forStmt.stmt);
+        //     }
+        //     else{ //如果不可能进入循环体，那么就不用继续遍历了
+        //         return true;
+        //     }
+        // }
+        // else{
+        //     return this.visit(forStmt.stmt);
+        // }
+        return this.visit(forStmt.stmt);
     }
 
 }

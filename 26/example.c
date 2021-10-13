@@ -1,4 +1,5 @@
-int foo(int a){
-    return a/2;
-}
+int foo(int a);
 
+int main(){
+    foo(5);
+}

@@ -7,7 +7,7 @@
 * @since 2021-06-04
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AstDumper = exports.AstVisitor = exports.ErrorStmt = exports.ErrorExp = exports.UnionOrIntersectionTypeExp = exports.ArrayPrimTypeExp = exports.ParenthesizedPrimTypeExp = exports.TypeReferenceExp = exports.LiteralTypeExp = exports.PredefinedTypeExp = exports.PrimTypeExp = exports.TypeExp = exports.BooleanLiteral = exports.NullLiteral = exports.DecimalLiteral = exports.IntegerLiteral = exports.StringLiteral = exports.Literal = exports.Variable = exports.FunctionCall = exports.Unary = exports.Binary = exports.Expression = exports.ForStatement = exports.IfStatement = exports.ReturnStatement = exports.ExpressionStatement = exports.VariableDecl = exports.VariableStatement = exports.Prog = exports.Block = exports.ParameterList = exports.CallSignature = exports.FunctionDecl = exports.Decl = exports.Statement = exports.AstNode = void 0;
+exports.AstDumper = exports.AstVisitor = exports.ErrorStmt = exports.ErrorExp = exports.UnionOrIntersectionTypeExp = exports.ArrayPrimTypeExp = exports.ParenthesizedPrimTypeExp = exports.TypeReferenceExp = exports.LiteralTypeExp = exports.PredefinedTypeExp = exports.PrimTypeExp = exports.TypeExp = exports.TypeOfExp = exports.BooleanLiteral = exports.NullLiteral = exports.DecimalLiteral = exports.IntegerLiteral = exports.StringLiteral = exports.Literal = exports.Variable = exports.FunctionCall = exports.Unary = exports.Binary = exports.Expression = exports.ForStatement = exports.IfStatement = exports.ReturnStatement = exports.ExpressionStatement = exports.VariableDecl = exports.VariableStatement = exports.Prog = exports.Block = exports.ParameterList = exports.CallSignature = exports.FunctionDecl = exports.Decl = exports.Statement = exports.AstNode = void 0;
 const symbol_1 = require("./symbol");
 const scanner_1 = require("./scanner");
 const types_1 = require("./types");
@@ -134,12 +134,12 @@ exports.VariableStatement = VariableStatement;
  * 变量声明节点
  */
 class VariableDecl extends Decl {
+    // inferredType:Type|null = null; //推测出的类型
     constructor(beginPos, endPos, name, typeExp, init, isErrorNode = false) {
         super(beginPos, endPos, name, isErrorNode);
         this.typeExp = null; //代表Type的Ast节点
         this.theType = types_1.SysTypes.Any; //变量类型，是从typeExp解析出来的。缺省是Any类型。
         this.sym = null;
-        this.inferredType = null; //推测出的类型
         this.typeExp = typeExp;
         this.init = init;
     }
@@ -362,6 +362,24 @@ class BooleanLiteral extends Literal {
 }
 exports.BooleanLiteral = BooleanLiteral;
 /**
+ * 类型查询
+ * 当前采用比较简单的语法规则：
+ * primary:  literal | functionCall | '(' expression ')' | typeOfExp ;
+ * typeOfExp : 'typeof' primary;
+ */
+class TypeOfExp extends Expression {
+    constructor(beginPos, endPos, exp, typeOfToken, isErrorNode = false) {
+        super(beginPos, endPos, isErrorNode);
+        this.theType = types_1.SysTypes.String;
+        this.exp = exp;
+        this.typeOfToken = typeOfToken;
+    }
+    accept(visitor, additional) {
+        return visitor.visitTypeOfExp(this, additional);
+    }
+}
+exports.TypeOfExp = TypeOfExp;
+/**
  * 代表了一个类型表达式
  */
 class TypeExp extends AstNode {
@@ -559,6 +577,9 @@ class AstVisitor {
     visitBooleanLiteral(exp, additional = undefined) {
         return exp.value;
     }
+    visitTypeOfExp(exp, additional = undefined) {
+        return this.visit(exp.exp, additional);
+    }
     visitVariable(variable, additional = undefined) {
     }
     visitFunctionCall(functionCall, additional = undefined) {
@@ -708,6 +729,11 @@ class AstDumper extends AstVisitor {
     }
     visitBooleanLiteral(exp, prefix) {
         console.log(prefix + exp.value + (exp.theType == null ? "" : "(" + exp.theType.toString() + ")") + (exp.isErrorNode ? " **E** " : ""));
+    }
+    visitTypeOfExp(exp, prefix) {
+        console.log(prefix + "typeof "
+            + (exp.isErrorNode ? " **E** " : ""));
+        this.visit(exp.exp, prefix + "    ");
     }
     visitVariable(variable, prefix) {
         console.log(prefix + "Variable: "

@@ -35,15 +35,17 @@
  * assignment: binary (assignmentOp binary)* ;
  * binary: unary (binOp unary)* ;
  * unary: primary | prefixOp unary | primary postfixOp ;
- * primary:  literal | functionCall | '(' expression ')' ;
+ * primary:  literal | functionCall | '(' expression ')' | typeOfExp ;
  * literal: StringLiteral | DecimalLiteral | IntegerLiteral | BooleanLiteral | NullLiteral ;
  * assignmentOp = '=' | '+=' | '-=' | '*=' | '/=' | '>>=' | '<<=' | '>>>=' | '^=' | '|=' ;
  * binOp: '+' | '-' | '*' | '/' | '==' | '!=' | '<=' | '>=' | '<'
  *      | '>' | '&&'| '||'|...;
  * prefixOp = '+' | '-' | '++' | '--' | '!' | '~';
  * postfixOp = '++' | '--'; 
+ * typeOfExp : 'typeof' primary;
  * functionCall : Identifier '(' argumentList? ')' ;
  * argumentList : expression (',' expression)* ;
+ * 
  */
 
  /*
@@ -86,7 +88,7 @@ predefinedType
  */
 
 import {Token, TokenKind, Scanner, Op, Seperator, Keyword, Position, Operators} from './scanner';
-import {AstVisitor, AstNode, Block, Prog, VariableStatement, VariableDecl, FunctionDecl, CallSignature, ParameterList ,FunctionCall, Statement, Expression, ExpressionStatement, Binary, Unary, IntegerLiteral, DecimalLiteral, StringLiteral, NullLiteral, BooleanLiteral, Literal, Variable, ReturnStatement, IfStatement, ForStatement, TypeExp, PrimTypeExp, PredefinedTypeExp, LiteralTypeExp, TypeReferenceExp, ParenthesizedPrimTypeExp, ArrayPrimTypeExp, UnionOrIntersectionTypeExp, ErrorExp, ErrorStmt} from './ast';
+import {AstVisitor, AstNode, Block, Prog, VariableStatement, VariableDecl, FunctionDecl, CallSignature, ParameterList ,FunctionCall, Statement, Expression, ExpressionStatement, Binary, Unary, IntegerLiteral, DecimalLiteral, StringLiteral, NullLiteral, BooleanLiteral, Literal, Variable, ReturnStatement, IfStatement, ForStatement, TypeExp, PrimTypeExp, PredefinedTypeExp, LiteralTypeExp, TypeReferenceExp, ParenthesizedPrimTypeExp, ArrayPrimTypeExp, UnionOrIntersectionTypeExp, ErrorExp, ErrorStmt, TypeOfExp} from './ast';
 import { assert } from 'console';
 import { SysTypes, Type, UnionType} from './types';
 import {CompilerError} from './error'
@@ -888,7 +890,7 @@ export class Parser{
         let t = this.scanner.peek();
 
         //前缀的一元表达式
-        if(t.kind == TokenKind.Operator){
+        if(t.kind == TokenKind.Operator){  //todo:应该明确是哪些运算符吧？
             this.scanner.next();//跳过运算符
             let exp = this.parseUnary();
             return new Unary(beginPos, this.scanner.getLastPos(), t.code as Op, exp, true);
@@ -942,6 +944,11 @@ export class Parser{
                 this.skip();
             }
             return exp;
+        }
+        else if (t.code == Keyword.Typeof){  //typeof
+            this.scanner.next();   //跳过typeof关键字
+            let exp = this.parsePrimary();
+            return new  TypeOfExp(beginPos, this.scanner.getLastPos(), exp,t);
         }
         else{
             //理论上永远不会到达这里

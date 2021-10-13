@@ -200,8 +200,8 @@ class Scanner {
             if (this.isLetter(ch) || ch == '_') {
                 return this.parseIdentifer();
             }
-            else if (ch == '"') {
-                return this.parseStringLiteral();
+            else if (ch == '"' || ch == "'") {
+                return this.parseStringLiteral(ch);
             }
             else if (ch == '(') {
                 this.stream.next();
@@ -616,15 +616,15 @@ class Scanner {
      * 字符串字面量。
      * 目前只支持双引号，并且不支持转义。
      */
-    parseStringLiteral() {
+    parseStringLiteral(quotationMark) {
         let pos = this.stream.getPosition();
         let token = new Token(TokenKind.StringLiteral, "", pos);
         //第一个字符不用判断，因为在调用者那里已经判断过了
         this.stream.next();
-        while (!this.stream.eof() && this.stream.peek() != '"') {
+        while (!this.stream.eof() && this.stream.peek() != quotationMark) {
             token.text += this.stream.next();
         }
-        if (this.stream.peek() == '"') {
+        if (this.stream.peek() == quotationMark) {
             //消化掉字符换末尾的引号
             this.stream.next();
         }

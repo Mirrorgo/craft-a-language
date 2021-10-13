@@ -8,7 +8,7 @@
  *
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.compileToAsm = void 0;
+exports.compileToAsm = exports.AsmGenerator = exports.AsmModule = void 0;
 const symbol_1 = require("./symbol");
 const ast_1 = require("./ast");
 const console_1 = require("console");
@@ -333,6 +333,7 @@ class AsmModule {
         return str;
     }
 }
+exports.AsmModule = AsmModule;
 /**
  * AsmGenerator需要用到的状态变量
  */
@@ -815,6 +816,7 @@ class AsmGenerator extends ast_1.AstVisitor {
         }
     }
 }
+exports.AsmGenerator = AsmGenerator;
 ///////////////////////////////////////////////////////////////////////////
 //Lower
 class Register extends Oprand {
@@ -956,41 +958,6 @@ Register.callerProtected64 = [
     Register.r10,
     Register.r11,
     Register.rax,
-];
-//xmm寄存器
-Register.xmm0 = new Register("xmm0", 128);
-Register.xmm1 = new Register("xmm1", 128);
-Register.xmm2 = new Register("xmm2", 128);
-Register.xmm3 = new Register("xmm3", 128);
-Register.xmm4 = new Register("xmm4", 128);
-Register.xmm5 = new Register("xmm5", 128);
-Register.xmm6 = new Register("xmm6", 128);
-Register.xmm7 = new Register("xmm7", 128);
-Register.xmm8 = new Register("xmm8", 128);
-Register.xmm9 = new Register("xmm9", 128);
-Register.xmm10 = new Register("xmm10", 128);
-Register.xmm11 = new Register("xmm11", 128);
-Register.xmm12 = new Register("xmm12", 128);
-Register.xmm13 = new Register("xmm13", 128);
-Register.xmm14 = new Register("xmm14", 128);
-Register.xmm15 = new Register("xmm15", 128);
-Register.xmmRegs = [
-    Register.xmm0,
-    Register.xmm1,
-    Register.xmm2,
-    Register.xmm3,
-    Register.xmm4,
-    Register.xmm5,
-    Register.xmm6,
-    Register.xmm7,
-    Register.xmm8,
-    Register.xmm9,
-    Register.xmm10,
-    Register.xmm11,
-    Register.xmm12,
-    Register.xmm13,
-    Register.xmm14,
-    Register.xmm15,
 ];
 /**
  * 内存寻址

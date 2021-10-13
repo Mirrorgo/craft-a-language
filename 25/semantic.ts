@@ -716,9 +716,11 @@ class TypeChecker extends SemanticAstVisitor{
 
         if (Operators.isAssignOp(bi.op)){
             bi.theType = t1;    
-            t2 = this.getDynamicType(bi.exp2);      
-
-            if (!TypeUtil.LE(t2,t1)){
+            t2 = this.getDynamicType(bi.exp2);    
+            
+            //对于赋值运算来说，t1不需要用动态类型，用原来的类型就可以。赋值操作可以修改它的动态类型。
+            let t1_static = bi.exp1.theType as Type;
+            if (!TypeUtil.LE(t2,t1_static)){
                 this.addError("Can not assign '"+t2.toString()+"' to '"+t1.toString()+"'." ,bi);
             }   
             else{

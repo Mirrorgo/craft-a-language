@@ -94,7 +94,7 @@ var SymKind;
 // }
 /////////////////////////////////////////////////////////////////////////
 //一些系统内置的符号
-exports.FUN_println = new FunctionSymbol("println", new types_1.FunctionType(types_1.SysTypes.Void, [types_1.SysTypes.String]), [new VarSymbol("a", types_1.SysTypes.String)]);
+exports.FUN_println = new FunctionSymbol("println", new types_1.FunctionType(types_1.SysTypes.Void, [types_1.SysTypes.Number]), [new VarSymbol("a", types_1.SysTypes.String)]);
 exports.FUN_tick = new FunctionSymbol("tick", new types_1.FunctionType(types_1.SysTypes.Integer, []), []);
 exports.FUN_integer_to_string = new FunctionSymbol("integer_to_string", new types_1.FunctionType(types_1.SysTypes.String, [types_1.SysTypes.Integer]), [new VarSymbol("a", types_1.SysTypes.Integer)]);
 exports.built_ins = new Map([

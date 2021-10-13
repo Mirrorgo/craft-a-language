@@ -1,83 +1,116 @@
 /**
  * 测试一些更深入的类型分析的例子。
  * 
- * 使用make example来构建。
- * 使用./example来运行。
  */
 
 // function foo1(age : number|null){
+//     println("foo1");
 //     let age1 : string|number;
 //     age1 = age;  //编译器在这里会检查出错误。
-//     console.log(age1);
 // }
 
 // function foo2(age1 : number|null, age2:string|number){
-//     if (age1 >= age2){  //OK。只要两个类型有交集就可以。
-//         console.log("same age!");
+//     println("foo2");
+//     if (age1 == age2){  //OK。只要两个类型有交集就可以。
+//         // console.log("same age!");
+//         println("same age!");
 //     }
 // }
 
 // function foo3(x : number|null, y:string|boolean){
+//     println("foo3");
 //     if (x == y){   //编译器报错：两个类型没有交集
-//         console.log("x and y is the same");
+//         println("x and y is the same");
 //     }
 // }
 
 // function foo4(age1 : number|null, age2:string|number){
+//     println("foo4");
 //     if (age1 >= age2){  //编译器报错
-//         console.log("same age!");
+//         println("bigger age!");
 //     }
 // }
 
 // function foo5(age1 : number, age2:string|number){
+//     println("foo5");
 //     if (age1 >= age2){  //OK。
-//         console.log("same age!");
+//         println("bigger age!");
 //     }
 // }
 
-
 // function foo6(age : number|null){
+//     println("foo6");
 //     let age1 : string|number;
 //     age = 18;     //age的类型现在变成了一个值类型：18
 //     age1 = age;   //这里编译器不再报错。
-//     console.log(age1);
+//     println(""+age1);
+//     // console.log(age1);
 // }
+// foo6(18);
 
 // function foo7(age : number|null){
+//     println("foo7");
 //     let age1 : string|number;
 //     age = 18;     //age的值域现在变成了一个值类型：18
 //     age1 = age;   //这里编译器不再报错。
 //     age = null;   //age的值域现在变成了null
 //     age1 = age;   //错误！
-//     console.log(age1);
+//     println(""+age1);
+//     // console.log(age1);
 // }
 
 // function foo8(age : number|null){
+//     println("foo8");
 //     let age1 : string|number;
 //     if (age != null){   //age的值域现在是number
 //         age1 = age;     //OK!
-//         console.log(age1);
+//         println(""+age1);
 //     }
 //     else{               //age==null, 值域现在变成了null
-//         console.log("age is empty!")
+//         println("age is empty!");
 //     }
 // }
 
-// function foo9(age : number|null){
-//     if (age == 18 || age == 81){  //age的值域现在是 18|81
-//         console.log("18 or 81");
+/**
+ * 注意，必须把等值表达式"age != null"放在if条件里才能被语义分析程序所使用。如果把它放在外面，
+ * 再用tsc --strict编译，仍然会报错。所以，编译器的智能程度还有待于进一步提升:)
+ */
+// function foo8_1(age : number|null){
+//     let age1 : string|number;
+//     let b = age != null;
+//     if (b){   
+//         age1 = age;     //这里编译器会报错！
+//         console.log(""+age1);
 //     }
-//     else{                         //age的值域是 !18 & !81 & (number | null)
-//         console.log("age is empty!")
+//     else{               
+//         console.log("age is empty!");
 //     }
 // }
+
+
+// function foo9(age : number|null){
+//     println("foo9");
+//     if (age == 18 || age == 81){  //age的值域现在是 18|81
+//         println("18 or 81");
+//     }
+//     else{                         //age的值域是 !18 & !81 & (number | null)
+//         println("age is empty!");
+//     }
+// }
+// foo9(18);
+// foo9(null);
 
 // function foo10(x : number|string, y : string){
 //    x = y;    //x的值域变成了string
 //    if (typeof x == 'string'){  //其实这个条件一定为true
-//        console.log("x is string");
+//        println("x is string");
 //    }
 // }
+// let a:any;
+// let b:number|undefined;
+// console.log(typeof a);
+// console.log(typeof b);
+
 
 // function foo11(x : number|string){
 //     let y: string;
@@ -86,7 +119,14 @@
 //     }
 // }
 
-// function foo12(x : number|null){
+function foo12(x : string|null){
+    let y: string;
+    if (x){      //x的值域变为string & !""
+        y = x;   //OK。
+    }
+}
+
+// function foo13(x : number|null){
 //     let y:number|string;
 //     let z:number;
 //     if (x != null){ //x的值域是number 
@@ -99,7 +139,7 @@
 //     return z;
 // }
 
-// function foo13(x : number|null){
+// function foo14(x : number|null){
 //     let y:number|string;
 //     let z:number;
 //     if (x != null){ //x的值域是number 
@@ -112,39 +152,40 @@
 //     return z;
 // }
 
-function foo14(){
-    let a:number = 13;
-    let b = a;
-    console.log(typeof a);
-}
 
-// function foo(name:string|null){
-//     if (name != null){
-//         println(name);
+// function foo15(x1:number|null):number{
+//     let x2 = 10;       //x2是常量10
+//     let x3 = x2 + 8;   //x3是常量18
+//     if (x1 == x3 ){    //并且x1的值域是18
+//         return x1;     //OK!
 //     }
-//     else{
-//         println("Name is empty!");
+//     return x2;
+// }
+
+// function foo16(a:number|string){
+//     a = "hello";    //a的值域是"hello"
+//     let b = a;      //推导出b的类型是string
+//     console.log(typeof b); 
+// }
+
+// function foo17(a:number|string|null){
+//     if(a == 10 || a == null){ //a的值域是10|null
+//         let b = a;            //推导出b的类型是number|null
+//         if (b == "hello"){    //编译器报错！
+//             console.log("whoops"); 
+//         }
 //     }
 // }
 
-// let age : string|number;
+//测试对!==的支持
+// function foo18(age : number|null) {
+//     println("foo18");
+//     let age1 : string|number;
+//     if (age !== null){   //age的值域现在是number
+//         age1 = age;     //OK!
+//         println(""+age1);
+//     }
 
-// function bar(str:string){
-//     console.log(str);
 // }
-
-// let name1 : string|null;
-
-// let a = 3;
-
-// if (a==2 || a==3){
-//     println("hello");
-// }
-
-// let b:2|3;
-// b = 3 ;
-// if (b == 2){
-//     println("b==2");
-// }
-
+// foo18(18);
 

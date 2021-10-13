@@ -337,7 +337,7 @@ class BasicBlock{
  * 用Asm表示的一个模块。
  * 可以输出成为asm文件。
  */
-class AsmModule{
+export class AsmModule{
     //每个函数对应的指令数组
     fun2Code:Map<FunctionSymbol, BasicBlock[]> = new Map();
 
@@ -404,7 +404,7 @@ class TempStates{
  * 1.先是尽力使用寄存器，寄存器用光以后就用栈桢；
  * 2.对于表达式，尽量复用寄存器来表示临时变量。
  */
-class AsmGenerator extends AstVisitor{
+export class AsmGenerator extends AstVisitor{
     //编译后的结果
     private asmModule:AsmModule|null = null;
 
@@ -932,9 +932,9 @@ class AsmGenerator extends AstVisitor{
 ///////////////////////////////////////////////////////////////////////////
 //Lower
 class Register extends Oprand{
-    bits:32|64|128 = 32;  //寄存器的位数
+    bits:32|64 = 32;  //寄存器的位数
     
-    private constructor(registerName:string, bits:32|64|128=32){
+    private constructor(registerName:string, bits:32|64=32){
         super(OprandKind.register,registerName);
         this.bits = bits;
     }
@@ -969,7 +969,6 @@ class Register extends Oprand{
     //栈顶和栈底
     static esp = new Register("esp");
     static ebp = new Register("ebp");
-
 
     //32位的可供分配的寄存器
     static registers32:Register[] = [
@@ -1098,43 +1097,6 @@ class Register extends Oprand{
         Register.rax,
     ];
   
-    //xmm寄存器
-    static xmm0 = new Register("xmm0",128);
-    static xmm1 = new Register("xmm1",128);
-    static xmm2 = new Register("xmm2",128);
-    static xmm3 = new Register("xmm3",128);
-    static xmm4 = new Register("xmm4",128);
-    static xmm5 = new Register("xmm5",128);
-    static xmm6 = new Register("xmm6",128);
-    static xmm7 = new Register("xmm7",128);
-    static xmm8 = new Register("xmm8",128);
-    static xmm9 = new Register("xmm9",128);
-    static xmm10 = new Register("xmm10",128);
-    static xmm11 = new Register("xmm11",128);
-    static xmm12 = new Register("xmm12",128);
-    static xmm13 = new Register("xmm13",128);
-    static xmm14 = new Register("xmm14",128);
-    static xmm15 = new Register("xmm15",128);
-
-    static xmmRegs:Register[] = [
-        Register.xmm0,
-        Register.xmm1,
-        Register.xmm2,
-        Register.xmm3,
-        Register.xmm4,
-        Register.xmm5,
-        Register.xmm6,
-        Register.xmm7,
-        Register.xmm8,
-        Register.xmm9,
-        Register.xmm10,
-        Register.xmm11,
-        Register.xmm12,
-        Register.xmm13,
-        Register.xmm14,
-        Register.xmm15,
-    ];
-
     toString():string{
         return "%"+this.value;
     }
@@ -1172,13 +1134,6 @@ class MemAddress extends Oprand{
  */
 
  class Lower{
-    ////////////////////////////////////////////////////
-    //
-
-
-    /////////////////////////////////////////////////////
-    //一些状态信息
-
      //前一步生成的LIR模型
     asmModule:AsmModule;
 

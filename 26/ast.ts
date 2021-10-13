@@ -7,7 +7,7 @@
 */
 
 import {Symbol, FunctionSymbol, VarSymbol, built_ins} from './symbol'
-import {Position, Op, Keyword} from './scanner'
+import {Position, Op, Keyword, Token} from './scanner'
 import {Scope} from './scope'
 import {Type, SysTypes, FunctionType} from './types'
 
@@ -30,6 +30,8 @@ export abstract class AstNode{
 
     //visitor模式中，用于接受vistor的访问。
     public abstract accept(visitor:AstVisitor, additional:any):any;  
+
+     
 
     //简单的string格式
     // abstract toString():string;
@@ -156,9 +158,9 @@ export class VariableStatement extends Statement{
 export class VariableDecl extends Decl{
     typeExp:TypeExp|null = null;   //代表Type的Ast节点
     theType:Type = SysTypes.Any;   //变量类型，是从typeExp解析出来的。缺省是Any类型。
-    init:Expression|null; //变量初始化所使用的表达式
+    init:Expression|null;          //变量初始化所使用的表达式
     sym:VarSymbol|null = null;
-    inferredType:Type|null = null; //推测出的类型
+    // inferredType:Type|null = null; //推测出的类型
     constructor(beginPos:Position, endPos:Position,name:string, typeExp:TypeExp|null, init:Expression|null,isErrorNode:boolean = false){
         super(beginPos, endPos, name,isErrorNode);
         this.typeExp = typeExp;
@@ -401,6 +403,27 @@ export class BooleanLiteral extends Literal{
 }
 
 /**
+ * 类型查询
+ * 当前采用比较简单的语法规则：
+ * primary:  literal | functionCall | '(' expression ')' | typeOfExp ;
+ * typeOfExp : 'typeof' primary;
+ */
+
+export class TypeOfExp extends Expression{
+    typeOfToken:Token;
+    exp: Expression;
+    constructor(beginPos:Position, endPos:Position, exp:Expression, typeOfToken:Token, isErrorNode:boolean = false){
+        super(beginPos, endPos, isErrorNode);
+        this.theType = SysTypes.String;
+        this.exp = exp;
+        this.typeOfToken = typeOfToken;
+    }
+    public accept(visitor:AstVisitor, additional:any):any{
+        return visitor.visitTypeOfExp(this,additional);
+    }
+} 
+
+/**
  * 代表了一个类型表达式
  */
 export abstract class TypeExp extends AstNode{
@@ -633,6 +656,10 @@ export abstract class AstVisitor{
         return exp.value;
     }
 
+    visitTypeOfExp(exp:TypeOfExp, additional:any=undefined):any{
+        return this.visit(exp.exp, additional);
+    }
+
     visitVariable(variable:Variable, additional:any=undefined):any{
     }
 
@@ -809,6 +836,12 @@ export class AstDumper extends AstVisitor{
 
     visitBooleanLiteral(exp:BooleanLiteral, prefix:any):any{
         console.log(prefix+exp.value+ (exp.theType == null? "" : "("+exp.theType.toString()+")") + (exp.isErrorNode? " **E** " : ""));
+    }
+
+    visitTypeOfExp(exp:TypeOfExp, prefix:any):any{
+        console.log(prefix + "typeof "
+        + (exp.isErrorNode? " **E** " : ""));
+        this.visit(exp.exp, prefix+"    ");
     }
 
     visitVariable(variable:Variable, prefix:any):any{

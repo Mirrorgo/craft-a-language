@@ -36,15 +36,17 @@
  * assignment: binary (assignmentOp binary)* ;
  * binary: unary (binOp unary)* ;
  * unary: primary | prefixOp unary | primary postfixOp ;
- * primary:  literal | functionCall | '(' expression ')' ;
+ * primary:  literal | functionCall | '(' expression ')' | typeOfExp ;
  * literal: StringLiteral | DecimalLiteral | IntegerLiteral | BooleanLiteral | NullLiteral ;
  * assignmentOp = '=' | '+=' | '-=' | '*=' | '/=' | '>>=' | '<<=' | '>>>=' | '^=' | '|=' ;
  * binOp: '+' | '-' | '*' | '/' | '==' | '!=' | '<=' | '>=' | '<'
  *      | '>' | '&&'| '||'|...;
  * prefixOp = '+' | '-' | '++' | '--' | '!' | '~';
  * postfixOp = '++' | '--';
+ * typeOfExp : 'typeof' primary;
  * functionCall : Identifier '(' argumentList? ')' ;
  * argumentList : expression (',' expression)* ;
+ *
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Parser = void 0;
@@ -803,7 +805,7 @@ class Parser {
         let beginPos = this.scanner.getNextPos();
         let t = this.scanner.peek();
         //前缀的一元表达式
-        if (t.kind == scanner_1.TokenKind.Operator) {
+        if (t.kind == scanner_1.TokenKind.Operator) { //todo:应该明确是哪些运算符吧？
             this.scanner.next(); //跳过运算符
             let exp = this.parseUnary();
             return new ast_1.Unary(beginPos, this.scanner.getLastPos(), t.code, exp, true);
@@ -855,6 +857,11 @@ class Parser {
                 this.skip();
             }
             return exp;
+        }
+        else if (t.code == scanner_1.Keyword.Typeof) { //typeof
+            this.scanner.next(); //跳过typeof关键字
+            let exp = this.parsePrimary();
+            return new ast_1.TypeOfExp(beginPos, this.scanner.getLastPos(), exp, t);
         }
         else {
             //理论上永远不会到达这里
