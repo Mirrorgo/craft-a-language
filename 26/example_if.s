@@ -12,7 +12,7 @@ _foo:
     movq	%rsp, %rbp
 ## bb.1
     ucomisd	%xmm1, %xmm0			#  ucomisd	var1, var0
-    jle	LBB0_3
+    jge	LBB0_3
 ## bb.2
     movsd	%xmm0, %xmm2				#  movsd	var0, var2
     addsd	LCPI0_0(%rip), %xmm2		#  addsd	doubleIndex(0), var2
@@ -32,6 +32,8 @@ LCPI1_0:
 	.quad	0x402e000000000000		## double 15
 LCPI1_1:
 	.quad	0x4024000000000000		## double 10
+LCPI1_2:
+	.quad	0x4022000000000000		## double 9
 
 	.section	__TEXT,__text,regular,pure_instructions
 
@@ -46,7 +48,7 @@ _main:
     movsd	LCPI1_1(%rip), %xmm1
     callq	_foo
     callq	_println_d
-    movsd	LCPI1_1(%rip), %xmm0
+    movsd	LCPI1_2(%rip), %xmm0
     movsd	LCPI1_1(%rip), %xmm1
     callq	_foo
     movsd	%xmm0, %xmm1				#  movsd	returnSlot, var1

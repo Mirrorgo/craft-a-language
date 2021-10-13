@@ -5,7 +5,7 @@
  * 使用./example_if来运行。
  */
 function foo(a:number, b:number):number{
-    if (a>b){
+    if (a<b){
         return a+5;
     }
     else{
@@ -15,4 +15,4 @@ function foo(a:number, b:number):number{
 
 println(foo(15,10));
 
-println(foo(10,10));
+println(foo(9,10));

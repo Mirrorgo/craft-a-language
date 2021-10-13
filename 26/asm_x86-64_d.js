@@ -28,6 +28,10 @@ var OpCode;
     OpCode[OpCode["jl"] = 4] = "jl";
     OpCode[OpCode["jge"] = 5] = "jge";
     OpCode[OpCode["jg"] = 6] = "jg";
+    OpCode[OpCode["jbe"] = 7] = "jbe";
+    OpCode[OpCode["jb"] = 8] = "jb";
+    OpCode[OpCode["jae"] = 9] = "jae";
+    OpCode[OpCode["ja"] = 10] = "ja";
     OpCode[OpCode["sete"] = 20] = "sete";
     OpCode[OpCode["setne"] = 21] = "setne";
     OpCode[OpCode["setl"] = 22] = "setl";
@@ -564,16 +568,20 @@ class AsmGenerator extends ast_1.AstVisitor {
     getJumpOpCode(compOprand) {
         let op = OpCode.jmp;
         if (compOprand.value == scanner_1.Op.G) {
-            op = OpCode.jg;
+            // op = OpCode.jg;
+            op = OpCode.ja;
         }
         else if (compOprand.value == scanner_1.Op.GE) {
-            op = OpCode.jge;
+            // op = OpCode.jge;
+            op = OpCode.jae;
         }
         else if (compOprand.value == scanner_1.Op.L) {
-            op = OpCode.jl;
+            // op = OpCode.jl;
+            op = OpCode.jb;
         }
         else if (compOprand.value == scanner_1.Op.LE) {
-            op = OpCode.jle;
+            // op = OpCode.jle;
+            op = OpCode.jbe;
         }
         else if (compOprand.value == scanner_1.Op.EQ) {
             op = OpCode.je;

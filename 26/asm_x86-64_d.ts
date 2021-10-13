@@ -26,6 +26,10 @@ enum OpCode{
     jl,
     jge,
     jg,
+    jbe,
+    jb,
+    jae,
+    ja,
 
     sete=20,
     setne,
@@ -648,16 +652,20 @@ class AsmGenerator extends AstVisitor{
     private getJumpOpCode(compOprand:Oprand):OpCode{
         let op:OpCode = OpCode.jmp;
         if (compOprand.value == Op.G){
-            op = OpCode.jg;
+            // op = OpCode.jg;
+            op = OpCode.ja;
         }
         else if (compOprand.value == Op.GE){
-            op = OpCode.jge;
+            // op = OpCode.jge;
+            op = OpCode.jae;
         }
         else if (compOprand.value == Op.L){
-            op = OpCode.jl;
+            // op = OpCode.jl;
+            op = OpCode.jb;
         }
         else if (compOprand.value == Op.LE){
-            op = OpCode.jle;
+            // op = OpCode.jle;
+            op = OpCode.jbe;
         }
         else if (compOprand.value == Op.EQ){
             op = OpCode.je;

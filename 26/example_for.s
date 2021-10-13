@@ -19,7 +19,7 @@ _main:
     movsd	LCPI0_0(%rip), %xmm1		#  movsd	doubleIndex(0), var1
 LBB0_2:
     ucomisd	LCPI0_1(%rip), %xmm1		#  ucomisd	doubleIndex(1), var1
-    jge	LBB0_4
+    jae	LBB0_4
 ## bb.3
     movsd	%xmm0, %xmm2				#  movsd	var0, var2
     addsd	%xmm1, %xmm2				#  addsd	var1, var2

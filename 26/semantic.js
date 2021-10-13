@@ -629,9 +629,6 @@ class TypeChecker extends SemanticAstVisitor {
         if (scanner_1.Operators.isAssignOp(bi.op)) {
             bi.theType = t1;
             t2 = this.getDynamicType(bi.exp2);
-            console.log("isAssignOp:");
-            console.log("t1= " + t1.toString());
-            console.log("t2= " + t2.toString());
             //对于赋值运算来说，t1不需要用动态类型，用原来的类型就可以。赋值操作可以修改它的动态类型。
             let t1_static = bi.exp1.theType;
             if (!types_1.TypeUtil.LE(t2, t1_static)) {
