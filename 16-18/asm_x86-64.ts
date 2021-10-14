@@ -600,19 +600,20 @@ export class AsmGenerator extends AstVisitor{
     }
 
     visitVariableDecl(variableDecl:VariableDecl):any{
-        if(variableDecl.init != null && this.s.functionSym !=null){
-            let right = this.visit(variableDecl.init) as Oprand;
-            let left = new Oprand(OprandKind.varIndex,this.s.functionSym.vars.indexOf(variableDecl.sym as VarSymbol));
-            //不可以两个都是内存变量
-            if (this.isParamOrLocalVar(right) || right.kind == OprandKind.immediate){
-                let newRight = new Oprand(OprandKind.varIndex, this.allocateTempVar());
-                this.getCurrentBB().insts.push(new Inst_2(OpCode.movl, right, newRight));
-                if (this.isTempVar(right)){
-                    this.s.deadTempVars.push(right.value);
-                }
-                right = newRight;
+        if(this.s.functionSym !=null){
+            let right:Oprand|null = null;
+            if (variableDecl.init != null){
+                right = this.visit(variableDecl.init) as Oprand;
             }
-            this.movIfNotSame(right, left);
+            let varIndex = this.s.functionSym.vars.indexOf(variableDecl.sym as VarSymbol);
+            let left = new Oprand(OprandKind.varIndex,varIndex);
+
+            //插入一条抽象指令，代表这里声明了一个变量
+            this.getCurrentBB().insts.push(new Inst_1(OpCode.declVar,left));
+
+            //赋值
+            if (right) this.movIfNotSame(right, left);
+
             return left;
         }
     }

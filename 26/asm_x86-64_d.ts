@@ -725,15 +725,20 @@ class AsmGenerator extends AstVisitor{
     }
 
     visitVariableDecl(variableDecl:VariableDecl):any{
-        if(variableDecl.init != null && this.s.functionSym !=null){
-            let right = this.visit(variableDecl.init) as Oprand;
+        if(this.s.functionSym !=null){
+            let right:Oprand|null = null;
+            if (variableDecl.init != null){
+                right = this.visit(variableDecl.init) as Oprand;
+            }
             let varIndex = this.s.functionSym.vars.indexOf(variableDecl.sym as VarSymbol);
             let left = new Oprand(OprandKind.varIndex,varIndex);
 
             //插入一条抽象指令，代表这里声明了一个变量
             this.getCurrentBB().insts.push(new Inst_1(OpCode.declVar,left));
 
-            this.movIfNotSame(right, left);
+            //赋值
+            if (right) this.movIfNotSame(right, left);
+
             return left;
         }
     }
