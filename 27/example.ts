@@ -1,0 +1,39 @@
+/**
+ * 用来随手编写一些测试程序的文件。
+ * 
+ * 使用make example来构建。
+ * 使用./example来运行。
+ */
+
+ let a1 = 2;
+ let b1 = 2.3;
+
+ println(a1+b1);
+
+// let age : string|number;
+// function foo(name:string|null){
+//     if (name != null){
+//         println(name);
+//     }
+//     // bar(name);
+// }
+
+// function bar(str:string){
+//     console.log(str);
+// }
+
+// let name1 : string|null;
+
+// let a = 3;
+
+// if (a==2 || a==3){
+//     println("hello");
+// }
+
+// let b:2|3;
+// b = 3 ;
+// if (b == 2){
+//     println("b==2");
+// }
+
+

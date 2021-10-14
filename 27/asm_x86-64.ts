@@ -1,0 +1,2080 @@
+/**
+ * 生成X64机器的指令
+ * @version 0.2
+ * @author 宫文学
+ * @license 木兰开源协议
+ * @since 2021-06-27
+ *  
+ */
+
+import {FunctionSymbol, VarSymbol, intrinsics} from './symbol'
+import {AstVisitor, AstNode, Block, Prog, VariableDecl, FunctionDecl, FunctionCall, Statement, Expression, ExpressionStatement, Binary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, Unary, ForStatement} from './ast';
+import { assert } from 'console';
+import { Op } from './scanner';
+import { Type, FunctionType, SysTypes } from './types';
+import {TailAnalyzer, TailAnalysisResult} from './tail';
+
+/**
+ * 指令的编码
+ */
+enum OpCode{
+    //不区分字节宽度的指令
+    jmp=0,
+    je,
+    jne,
+    jle,
+    jl,
+    jge,
+    jg,
+
+    sete=20,
+    setne,
+    setl,
+    setle,
+    setg,
+    setge,
+
+    //8字节指令
+    movq=40,
+    addq,
+    subq,
+    mulq,
+    imulq,
+    divq,
+    idivq,
+    negq,
+    incq,
+    decq,
+    xorq,
+    orq,
+    andq,
+    notq,
+    leaq,
+    callq,
+    retq,
+    pushq,
+    popq,
+    cmpq,
+
+    //4字节指令
+    movl=80,
+    addl,
+    subl,
+    mull,
+    imull,
+    divl,
+    idivl,
+    negl,
+    incl,
+    decl,
+    xorl,
+    orl,
+    andl,
+    notl,
+    leal,
+    calll,
+    retl,
+    pushl,
+    popl,
+    cmpl,
+
+    //2字节指令
+    movw=120,
+    addw,
+    subw,
+    mulw,
+    imulw,
+    divw,
+    idivw,
+    negw,
+    incw,
+    decw,
+    xorw,
+    orw,
+    andw,
+    notw,
+    leaw,
+    callw,
+    retw,
+    pushw,
+    popw,
+    cmpw,
+
+    //单字节指令
+    movb=160,
+    addb,
+    subb,
+    mulb,   //无符号乘
+    imulb,  //有符号乘
+    divb,   //无符号除
+    idivb,  //有符号除
+    negb,
+    incb,
+    decb,
+    xorb,
+    orb,
+    andb,
+    notb,
+    leab,
+    callb,
+    retb,
+    pushb,
+    popb,
+    cmpb,
+
+    //伪指令
+    declVar,       //变量声明
+    reload,        //重新装载被溢出到内存的变量到寄存器
+    tailRecursive, //尾递归的函数调用
+    tailCall,      //尾调用
+    tailRecursiveJmp, //尾递归产生的jmp指令，操作数是一个基本块，是序曲下的第一个基本块。
+    tailCallJmp,      //尾调用产生的jmp指令，操作数是一个字符串（标签）
+}
+
+class OpCodeHelper{
+    static isReturn(op:OpCode){
+        return op == OpCode.retb || op == OpCode.retw || op == OpCode.retl ||  op == OpCode.retq; 
+    }
+
+    static isJump(op:OpCode){
+        return op<20;
+    }
+}
+
+/**
+ * 指令
+ */
+abstract class Inst{
+    op:OpCode;
+    numOprands:0|1|2;
+    comment:string|null; //这条指令的注释
+    constructor(op:OpCode, numOprands:0|1|2, comment:string|null=null){
+        this.op = op;
+        this.numOprands = numOprands;
+        this.comment = comment;
+    }
+    abstract toString():string;
+    patchComments(str:string):string{
+        if(this.comment != null){
+            if (str.length<11) 
+                str+="\t\t\t";
+            else if (str.length<19) 
+                str+="\t\t";
+            else if (str.length<21)
+                str+="\t"
+            str += (this.comment==null ? "" : "\t\t#  "+this.comment);
+        }
+        return str;
+    }
+}
+
+/**
+ * 没有操作数的指令
+ */
+class Inst_0 extends Inst{
+    constructor(op:OpCode, comment:string|null=null){
+        super(op,0,comment);
+    }
+    toString():string{
+        let str = OpCode[this.op];
+        return this.patchComments(str);
+    }
+}
+
+/**
+ * 有一个操作数的指令
+ */
+class Inst_1 extends Inst{
+    oprand:Oprand;
+    constructor(op:OpCode,oprand:Oprand,comment:string|null=null){
+        super(op,1,comment);
+        this.oprand = oprand;
+    }
+    toString():string{
+        let str = OpCode[this.op] + "\t" + this.oprand.toString();
+        return this.patchComments(str);
+    }
+    static isInst_1(inst:Inst):boolean{
+        return typeof (inst as Inst_1).oprand == 'object';
+    }
+}
+
+/**
+ * 有一个操作数的指令
+ */
+class Inst_2 extends Inst{
+    oprand1:Oprand;
+    oprand2:Oprand;
+    constructor(op:OpCode,oprand1:Oprand,oprand2:Oprand,comment:string|null=null){
+        super(op,2,comment);
+        this.oprand1 = oprand1;
+        this.oprand2 = oprand2;
+    }
+    toString():string{
+        let str = OpCode[this.op] + "\t" + this.oprand1.toString() + ", " + this.oprand2.toString();    
+        return this.patchComments(str);
+    }
+    static isInst_2(inst:Inst):boolean{
+        return typeof (inst as Inst_2).oprand1 == 'object';
+    }
+}
+
+/**
+ * 操作数
+ */
+class Oprand{
+    kind:OprandKind;
+    value:any;
+    constructor(kind:OprandKind, value:any){
+        this.kind = kind;
+        this.value = value;
+    }
+
+    isSame(oprand1:Oprand):boolean{
+        return this.kind == oprand1.kind && this.value == oprand1.value;
+    }
+
+    toString():string{
+        if(this.kind == OprandKind.bb){
+            let b = this.value as BasicBlock;
+            return b.getName();
+        }
+        else if (this.kind == OprandKind.label){
+            return this.value;
+        }
+        else if (this.kind == OprandKind.immediate){
+            return "$"+this.value;
+        }
+        else if (this.kind == OprandKind.returnSlot){
+                return "returnSlot";
+        }
+        else if (this.kind == OprandKind.varIndex){
+            return "var"+this.value;
+        }
+        else{
+            return OprandKind[this.kind] + "(" + this.value + ")";
+        }
+        
+    }
+}
+
+class FunctionOprand extends Oprand{
+    args:Oprand[];
+    returnType:Type;
+    constructor(funtionName:string, args:Oprand[], returnType:Type){
+        super(OprandKind.function, funtionName);
+        this.returnType = returnType;
+        this.args = args;
+    }
+
+    toString():string{
+        return "_"+this.value;
+    }
+}
+
+/**
+ * 操作数的类型
+ */
+enum OprandKind{
+    //抽象度较高的操作数
+    varIndex,       //变量下标
+    returnSlot,     //用于存放返回值的位置（通常是一个寄存器）
+    bb,             //跳转指令指向的基本块
+    function,       //函数调用
+    stringConst,    //字符串常量
+
+    //抽象度较低的操作数
+    register,       //物理寄存器
+    memory,         //内存访问
+    immediate,      //立即数
+    label,          //标签，从bb类型的操作数Lower而成
+
+    //cmp指令的结果，是设置寄存器的标志位
+    //后面可以根据flag和比较操作符的类型，来确定后续要生成的代码
+    flag,
+}
+
+/**
+ * 基本块
+ */
+class BasicBlock{
+    insts:Inst[] = [];      //基本块内的指令
+
+    funIndex:number = -1;   //函数编号
+    bbIndex:number = -1;    //基本块的编号。在Lower的时候才正式编号，去除空块。
+    isDestination:boolean = false;  //有其他块跳转到该块。
+
+    getName():string{
+        if (this.bbIndex != -1 && this.funIndex != -1){
+            return "LBB" + this.funIndex+"_"+this.bbIndex;
+        } 
+        else if (this.bbIndex != -1){
+            return "LBB" +this.bbIndex;
+        }
+        else{
+            return "LBB";
+        }
+    }
+
+    toString():string{
+        let str;
+        if (this.isDestination){
+            str = this.getName()+":\n";
+        }
+        else{
+            str = "## bb."+this.bbIndex+"\n";
+        }
+
+        for (let inst of this.insts){
+            str += "    "+ inst.toString()+"\n";
+        }
+
+        return str;
+    }
+}
+
+/**
+ * 用Asm表示的一个模块。
+ * 可以输出成为asm文件。
+ */
+export class AsmModule{
+    //每个函数对应的指令数组
+    fun2Code:Map<FunctionSymbol, BasicBlock[]> = new Map();
+
+    //每个函数的变量数，包括参数、本地变量和临时变量
+    numTotalVars:Map<FunctionSymbol, number> = new Map();
+
+    //是否是叶子函数
+    isLeafFunction:Map<FunctionSymbol, boolean> = new Map();
+
+    //字符串常量
+    stringConsts:string[] = [];
+
+    /**
+     * 输出代表该模块的asm文件的字符串。
+     */
+    toString():string{
+        let str = "    .section	__TEXT,__text,regular,pure_instructions\n";  //伪指令：一个文本的section
+        for (let fun of this.fun2Code.keys()){
+            let funName = "_"+fun.name;
+            str += "\n    .global "+funName+"\n";  //添加伪指令
+            str += funName + ":\n";
+            str += "    .cfi_startproc\n"; 
+            let bbs = this.fun2Code.get(fun) as BasicBlock[];
+            for (let bb of bbs){
+                str += bb.toString();
+            }
+            str += "    .cfi_endproc\n";
+        }
+        return str;
+
+    }
+}
+
+/**
+ * AsmGenerator需要用到的状态变量
+ */
+class TempStates{
+    //当前的函数，用于查询本地变量的下标
+    functionSym:FunctionSymbol|null = null; 
+
+    //当前函数生成的指令
+    bbs:BasicBlock[] = [];
+
+    //下一个临时变量的下标
+    nextTempVarIndex:number = 0;
+
+    //每个表达式节点对应的临时变量的索引
+    tempVarMap:Map<Expression, number> = new Map();
+
+    //主要用于判断当前的Unary是一个表达式的一部分，还是独立的一个语句
+    inExpression:boolean = false;
+
+    //保存一元后缀运算符对应的指令。
+    postfixUnaryInst:Inst_1|null = null;
+
+    //当前的BasicBlock编号
+    blockIndex = 0;
+}
+
+/**
+ * 汇编代码生成程序。
+ * 这是一个比较幼稚的算法，使用了幼稚的寄存器分配算法，但已经尽量争取多使用寄存器，对于简单的函数已经能生成性能不错的代码。
+ * 算法特点：
+ * 1.先是尽力使用寄存器，寄存器用光以后就用栈桢；
+ * 2.对于表达式，尽量复用寄存器来表示临时变量。
+ */
+export class AsmGenerator extends AstVisitor{
+    //编译后的结果
+    private asmModule:AsmModule|null = null;
+
+    //用来存放返回值的位置
+    private returnSlot:Oprand = new Oprand(OprandKind.returnSlot, -1);
+
+    //一些状态变量
+    private s = new TempStates();
+
+    //尾递归和尾调用分析的结果
+    private tailAnalysisResult:TailAnalysisResult|null = null;
+
+    /**
+     * 分配一个临时变量的下标。尽量复用已经死掉的临时变量
+     */
+    private allocateTempVar():Oprand{
+        let varIndex = this.s.nextTempVarIndex++;
+        let oprand = new Oprand(OprandKind.varIndex, varIndex);
+        //这里要添加一个变量声明
+        this.getCurrentBB().insts.push(new Inst_1(OpCode.declVar,oprand));
+        return oprand;
+    }
+
+    private isTempVar(oprand:Oprand){
+        if (this.s.functionSym!=null){
+            return oprand.kind == OprandKind.varIndex && 
+                oprand.value >= this.s.functionSym.vars.length;
+        }
+        else{
+            return false;
+        }
+    }
+
+    /**
+     * 如果操作数不同，则生成mov指令；否则，可以减少一次拷贝。
+     * @param src 
+     * @param dest 
+     */
+    private movIfNotSame(src:Oprand, dest:Oprand){
+        if (!src.isSame(dest)){
+            this.getCurrentBB().insts.push(new Inst_2(OpCode.movl,src,dest));
+        }
+    }
+
+    private getCurrentBB():BasicBlock{
+        return this.s.bbs[this.s.bbs.length-1];
+    }
+
+    private newBlock():BasicBlock{
+        let bb = new BasicBlock();
+        bb.bbIndex = this.s.blockIndex++;
+        this.s.bbs.push(bb);
+        
+        return bb;
+    }
+
+    /**
+     * 主函数
+     * @param prog 
+     */
+    visitProg(prog:Prog):any{
+        //设置一些状态变量
+        this.asmModule = new AsmModule();
+        this.s.functionSym = prog.sym  as FunctionSymbol;
+        this.s.nextTempVarIndex = this.s.functionSym.vars.length;
+
+        //尾递归、尾调用分析
+        let tailAnalyzer = new TailAnalyzer();
+        this.tailAnalysisResult = tailAnalyzer.visitProg(prog);
+
+        //创建新的基本块
+        this.newBlock();
+
+        //遍历AST
+        this.visitBlock(prog); 
+        this.asmModule?.fun2Code.set(this.s.functionSym, this.s.bbs);
+        this.asmModule?.numTotalVars.set(this.s.functionSym, this.s.nextTempVarIndex);
+
+        //重新设置状态变量
+        this.s = new TempStates();
+        this.tailAnalysisResult = null;
+
+        return this.asmModule;
+    }
+
+    visitFunctionDecl(functionDecl:FunctionDecl):any{
+        //保存原来的状态信息
+        let s = this.s;
+
+        //新建立状态信息
+        this.s = new TempStates();
+        this.s.functionSym = functionDecl.sym as FunctionSymbol;       
+        this.s.nextTempVarIndex = this.s.functionSym.vars.length;
+
+        //计算当前函数是不是叶子函数
+        //先设置成叶子变量。如果遇到函数调用，则设置为false。
+        this.asmModule?.isLeafFunction.set(this.s.functionSym as FunctionSymbol, true);
+
+        //创建新的基本块
+        this.newBlock();
+
+        //生成代码
+        this.visitBlock(functionDecl.body); 
+
+        //保存生成的代码
+        this.asmModule?.fun2Code.set(this.s.functionSym, this.s.bbs);
+        this.asmModule?.numTotalVars.set(this.s.functionSym, this.s.nextTempVarIndex);
+
+        //恢复原来的状态信息
+        this.s = s;
+    }
+
+    /**
+     * 把返回值mov到指定的寄存器。
+     * 这里并不生成ret指令，而是在程序的尾声中处理。
+     * @param rtnStmt 
+     */
+    visitReturnStatement(rtnStmt:ReturnStatement):any{
+        if (rtnStmt.exp!=null){
+            let ret = this.visit(rtnStmt.exp) as Oprand;
+            //把返回值赋给相应的寄存器
+            this.movIfNotSame(ret,this.returnSlot);
+
+            //分叉出一个额外的尾声块。
+            if (this.tailAnalysisResult!= null){
+                if (this.tailAnalysisResult.tailRecursives.indexOf(rtnStmt.exp as FunctionCall) !=-1){
+                    this.getCurrentBB().insts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb,this.s.bbs[0]),"Tail Recursive Optimazation"));
+                }
+                else if (this.tailAnalysisResult.tailCalls.indexOf(rtnStmt.exp as FunctionCall) !=-1){
+                    let functionName = (rtnStmt.exp as FunctionCall).name;
+                    this.getCurrentBB().insts.push(new Inst_1(OpCode.tailCallJmp, new Oprand(OprandKind.label,"_"+functionName),"Tail Call Optimazation"));
+                }
+            }
+        }
+    }
+
+    visitIfStatement(ifStmt:IfStatement):any{
+        //条件
+        let bbCondition = this.getCurrentBB();
+        let compOprand = this.visit(ifStmt.condition) as Oprand;
+
+        //if块
+        let bbIfBlcok = this.newBlock();
+        this.visit(ifStmt.stmt);
+        
+        //else块
+        let bbElseBlock:BasicBlock|null = null
+        if (ifStmt.elseStmt != null){
+            bbElseBlock = this.newBlock();
+            this.visit(ifStmt.elseStmt);
+        }
+
+        //最后，要新建一个基本块,用于If后面的语句。
+        let bbFollowing = this.newBlock();
+
+        //为bbCondition添加跳转语句
+        let op = this.getJumpOpCode(compOprand);
+        let instConditionJump:Inst_1;
+        if (bbElseBlock !=null){
+            //跳转到else块
+            instConditionJump = new Inst_1(op,new Oprand(OprandKind.bb, bbElseBlock));
+        }
+        else{
+            //跳转到if之后的块
+            instConditionJump = new Inst_1(op,new Oprand(OprandKind.bb, bbFollowing));
+        }
+        bbCondition.insts.push(instConditionJump);
+
+        //为bbIfBlock添加跳转语句
+        if (bbElseBlock !=null){  //如果没有else块，就不需要添加跳转了。
+            let instIfBlockJump = new Inst_1(OpCode.jmp,new Oprand(OprandKind.bb, bbFollowing));
+            bbIfBlcok.insts.push(instIfBlockJump);
+        }
+    }
+    
+    /**
+     * 根据条件表达式的操作符，确定该采用的跳转指令。用于if语句和for循环等中。
+     * @param compOprand 
+     */
+    private getJumpOpCode(compOprand:Oprand):OpCode{
+        let op:OpCode = OpCode.jmp;
+        if (compOprand.value == Op.G){
+            op = OpCode.jg;
+        }
+        else if (compOprand.value == Op.GE){
+            op = OpCode.jge;
+        }
+        else if (compOprand.value == Op.L){
+            op = OpCode.jl;
+        }
+        else if (compOprand.value == Op.LE){
+            op = OpCode.jle;
+        }
+        else if (compOprand.value == Op.EQ){
+            op = OpCode.je;
+        }
+        else if (compOprand.value == Op.NE){
+            op = OpCode.jne;
+        }
+        else{
+            console.log("Unsupported compare operand in conditional expression: " + compOprand.value);
+        }
+        return op;
+    }
+
+    visitForStatement(forStmt:ForStatement):any{
+        //初始化，放到前一个BasicBlock中
+        if (forStmt.init != null){
+            this.visit(forStmt.init);
+        }
+
+        //condition
+        let bbCondition = this.newBlock();
+        let compOprand:Oprand|null = null;
+        if (forStmt.condition != null){
+            compOprand = this.visit(forStmt.condition) as Oprand;
+        }
+
+        //循环体
+        let bbBody = this.newBlock();
+        this.visit(forStmt.stmt);
+
+        //增长语句，跟循环体在同一个BasicBlock中
+        if(forStmt.increment != null){
+            this.visit(forStmt.increment);
+        }
+
+        //最后，要新建一个基本块,用于If后面的语句。
+        let bbFollowing = this.newBlock();
+
+        //为bbCondition添加跳转语句
+        if(compOprand != null){  //如果没有循环条件，就会直接落到循环体中
+            let op = this.getJumpOpCode(compOprand);
+            let instConditionJump= new Inst_1(op,new Oprand(OprandKind.bb, bbFollowing));
+            bbCondition.insts.push(instConditionJump);
+        }
+ 
+        //为循环体添加跳转语句
+        let bbDest:BasicBlock;
+        if (compOprand !=null){  
+            bbDest = bbCondition;  //去执行循环条件
+        } 
+        else{   //如果没有循环条件，就直接回到循环体的第一句
+            bbDest = bbBody;
+        }
+        let instBodyJump = new Inst_1(OpCode.jmp,new Oprand(OprandKind.bb, bbDest));
+        bbBody.insts.push(instBodyJump);
+
+    }
+
+    visitVariableDecl(variableDecl:VariableDecl):any{
+        if(this.s.functionSym !=null){
+            let right:Oprand|null = null;
+            if (variableDecl.init != null){
+                right = this.visit(variableDecl.init) as Oprand;
+            }
+            let varIndex = this.s.functionSym.vars.indexOf(variableDecl.sym as VarSymbol);
+            let left = new Oprand(OprandKind.varIndex,varIndex);
+
+            //插入一条抽象指令，代表这里声明了一个变量
+            this.getCurrentBB().insts.push(new Inst_1(OpCode.declVar,left));
+
+            //赋值
+            if (right) this.movIfNotSame(right, left);
+
+            return left;
+        }
+    }
+
+    /**
+     * 二元表达式
+     * @param bi 
+     */
+    visitBinary(bi:Binary):any{
+        this.s.inExpression = true;
+
+        let insts = this.getCurrentBB().insts;
+
+        //左子树返回的操作数
+        let left = this.visit(bi.exp1) as Oprand;
+
+        //右子树
+        let right = this.visit(bi.exp2) as Oprand;
+
+        assert(typeof left == 'object', "表达式没有返回Oprand。");
+        assert(typeof right == 'object', "表达式没有返回Oprand。");
+
+        //计算出一个目标操作数
+        let dest: Oprand = left;
+
+        if (bi.op == Op.Plus || bi.op == Op.Minus || bi.op == Op.Multiply || bi.op == Op.Divide){
+            if (!this.isTempVar(dest)){
+                dest = this.allocateTempVar();
+                insts.push(new Inst_2(OpCode.movl, left, dest));
+            }
+        }
+
+        //生成指令
+        //todo 有问题的地方
+        switch(bi.op){
+            case Op.Plus: //'+'
+                if (bi.theType === SysTypes.String){ //字符串加
+                    let args:Oprand[] = [];
+                    args.push(left);
+                    args.push(right);
+                    this.callIntrinsics("string_concat", args);
+                }
+                else{
+                    // this.movIfNotSame(left,dest);
+                    insts.push(new Inst_2(OpCode.addl,right, dest));
+                }
+                break;
+            case Op.Minus: //'-'
+                // this.movIfNotSame(left,dest);
+                insts.push(new Inst_2(OpCode.subl,right, dest));
+                break;
+            case Op.Multiply: //'*'
+                // this.movIfNotSame(left,dest);
+                insts.push(new Inst_2(OpCode.imull,right, dest));
+                break;
+            case Op.Divide: //'/'
+                // this.movIfNotSame(left,dest);
+                insts.push(new Inst_2(OpCode.idivl,right, dest));
+                break;
+            case Op.Assign: //'='
+                this.movIfNotSame(right,dest);
+                break;
+            case Op.G:    
+            case Op.L:
+            case Op.GE:
+            case Op.LE:
+            case Op.EQ:      
+            case Op.NE: 
+                insts.push(new Inst_2(OpCode.cmpl, right, dest)); 
+                dest = new Oprand(OprandKind.flag, this.getOpsiteOp(bi.op));
+                break;      
+            default:
+                console.log("Unsupported OpCode in AsmGenerator.visitBinary: "+Op[bi.op]);
+        }
+
+        this.s.inExpression = false;
+
+        return dest;
+    }
+
+    private getOpsiteOp(op:Op):Op{
+        let newOp:Op = op;
+        switch(op){
+            case Op.G:    
+                newOp = Op.LE;
+                break;
+            case Op.L:
+                newOp = Op.GE;
+                break;
+            case Op.GE:
+                newOp = Op.L;
+                break;
+            case Op.LE:
+                newOp = Op.G;
+                break;
+            case Op.EQ:      
+                newOp = Op.NE;
+                break;
+            case Op.NE: 
+                newOp = Op.EQ;
+                break;
+            default:
+                console.log("Unsupport Op '"+ Op[op] + "' in getOpsiteOpCode.");
+        }
+        return newOp;
+    }
+
+    /**
+     * 为一元运算符生成指令
+     * 对于++或--这样的一元运算，只能是右值。如果是后缀表达式，需要在前一条指令之后，再把其值改一下。
+     * 所以，存个临时状态信息
+     * @param u 
+     */
+    visitUnary(u:Unary):any{
+        let insts = this.getCurrentBB().insts;
+
+        let oprand = this.visit(u.exp) as Oprand;
+
+        //用作返回值的Oprand
+        let result:Oprand = oprand;  
+
+        //++和--
+        if(u.op == Op.Inc || u.op == Op.Dec){
+            let tempVar = this.allocateTempVar();
+            insts.push(new Inst_2(OpCode.movl, oprand, tempVar));
+            if(u.isPrefix){  //前缀运算符
+                result = tempVar;
+            }
+            else{  //后缀运算符
+                //把当前操作数放入一个临时变量作为返回值
+                result = this.allocateTempVar();
+                insts.push(new Inst_2(OpCode.movl, oprand, result));
+            }
+            //做+1或-1的运算
+            let opCode = u.op == Op.Inc ? OpCode.addl : OpCode.subl;
+            insts.push(new Inst_2(opCode, new Oprand(OprandKind.immediate,1), tempVar));
+            insts.push(new Inst_2(OpCode.movl, tempVar, oprand));
+        }
+        //+
+        else if (u.op == Op.Plus){
+            result = oprand;
+        }
+        //-
+        else if (u.op == Op.Minus){
+            let tempVar = this.allocateTempVar();
+            //用0减去当前值
+            insts.push(new Inst_2(OpCode.movl, new Oprand(OprandKind.immediate,0), tempVar));
+            insts.push(new Inst_2(OpCode.subl, oprand, tempVar));
+            result = tempVar;
+        }
+
+        return result;
+    }
+
+    visitExpressionStatement(stmt:ExpressionStatement):any{
+        //先去为表达式生成指令
+        super.visitExpressionStatement(stmt);
+    }
+
+    visitVariable(variable:Variable):any{
+        if (this.s.functionSym !=null && variable.sym!=null){
+            return new Oprand(OprandKind.varIndex, this.s.functionSym.vars.indexOf(variable.sym));
+        }
+    }
+
+    visitIntegerLiteral(integerLiteral:IntegerLiteral):any{
+        return new Oprand(OprandKind.immediate, integerLiteral.value);
+    }
+
+    visitStringLiteral(stringLiteral:StringLiteral):any{
+        //加到常数表里
+        if (this.asmModule != null){
+            let strIndex = this.asmModule.stringConsts.indexOf(stringLiteral.value as string);
+            if( strIndex == -1){
+                this.asmModule.stringConsts.push(stringLiteral.value as string);
+                strIndex = this.asmModule.stringConsts.length - 1;
+            }
+
+            //调用一个内置函数来创建PlayString
+            let args:Oprand[] = [];
+            args.push(new Oprand(OprandKind.stringConst, strIndex));
+            return this.callIntrinsics("string_create_by_str", args);
+        }
+    }
+
+    private callIntrinsics(intrinsic:string, args:Oprand[]):any{
+        let insts = this.getCurrentBB().insts;
+
+        let functionSym = intrinsics.get("string_create_by_str") as FunctionSymbol;
+        let functionType = functionSym.theType as FunctionType;
+
+        insts.push(new Inst_1(OpCode.callq, new FunctionOprand("string_create_by_str", args,functionType.returnType)));
+
+        //把结果放到一个新的临时变量里
+        if(functionType.returnType != SysTypes.Void){ //函数有返回值时
+            let dest = this.allocateTempVar();
+            insts.push(new Inst_2(OpCode.movl, this.returnSlot, dest));
+            return dest;
+        }
+    }
+
+    /**
+     * 为函数调用生成指令
+     * 计算每个参数，并设置参数
+     * @param functionCall 
+     */
+    visitFunctionCall(functionCall:FunctionCall):any{
+        //当前函数不是叶子函数
+        this.asmModule?.isLeafFunction.set(this.s.functionSym as FunctionSymbol, false);
+
+        let insts = this.getCurrentBB().insts;
+
+        let args:Oprand[] = [];
+        for(let arg of functionCall.arguments){
+            let oprand = this.visit(arg) as Oprand;
+            args.push(oprand);
+        }
+
+        let functionSym = functionCall.sym as FunctionSymbol;
+        let functionType = functionSym.theType as FunctionType;
+
+        //看看是不是尾递归或尾调用
+        let isTailCall = false;
+        let isTailRecursive = false;
+        if (this.tailAnalysisResult != null){
+            if (this.tailAnalysisResult.tailRecursives.indexOf(functionCall) != -1){
+                isTailRecursive = true;
+            }
+            else if (this.tailAnalysisResult.tailCalls.indexOf(functionCall) != -1){
+                isTailCall = true;
+            }
+        }
+
+        //对于尾递归和尾调用，使用一个伪指令
+        let op = OpCode.callq;
+        if (isTailRecursive){
+            op = OpCode.tailRecursive;
+        }
+        else if (isTailCall){
+            op = OpCode.tailCall;
+        }
+        insts.push(new Inst_1(op, new FunctionOprand(functionCall.name, args,functionType.returnType)));
+
+        //对于尾递归和尾调用，不需要处理返回值，也不需要做变量的溢出和重新装载
+        if (!isTailCall && !isTailRecursive){
+            //把结果放到一个新的临时变量里
+            let dest:Oprand|undefined = undefined; 
+            if(functionType.returnType != SysTypes.Void){ //函数有返回值时
+                dest = this.allocateTempVar();
+                insts.push(new Inst_2(OpCode.movl, this.returnSlot, dest));
+            }
+
+            //调用函数完毕以后，要重新装载被Spilled的变量
+            //这个动作要在获取返回值之后
+            insts.push(new Inst_0(OpCode.reload));
+
+            return dest;
+        }
+        else{
+            return this.returnSlot;
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////
+//Lower
+class Register extends Oprand{
+    bits:32|64 = 32;  //寄存器的位数
+    
+    private constructor(registerName:string, bits:32|64=32){
+        super(OprandKind.register,registerName);
+        this.bits = bits;
+    }
+
+    //可供分配的寄存器的数量
+    //16个通用寄存器中，扣除rbp和rsp，然后保留一个寄存器，用来作为与内存变量交换的区域。
+    static numAvailableRegs = 13;
+
+    //32位寄存器
+    //参数用的寄存器，当然也要由caller保护
+    static edi = new Register("edi");
+    static esi = new Register("esi");
+    static edx = new Register("edx");
+    static ecx = new Register("ecx");
+    static r8d = new Register("r8d");
+    static r9d = new Register("r9d");
+    
+    //通用寄存器:caller（调用者）负责保护
+    static r10d = new Register("r10d");
+    static r11d = new Register("r11d");
+
+    //返回值，也由Caller保护
+    static eax = new Register("eax");
+
+    //通用寄存器:callee（调用者）负责保护
+    static ebx = new Register("ebx");
+    static r12d = new Register("r12d");
+    static r13d = new Register("r13d");
+    static r14d = new Register("r14d");
+    static r15d = new Register("r15d");   
+
+    //栈顶和栈底
+    static esp = new Register("esp");
+    static ebp = new Register("ebp");
+
+    //32位的可供分配的寄存器
+    static registers32:Register[] = [
+        Register.r10d,
+        Register.r11d,
+
+        Register.edi,
+        Register.esi,
+        Register.edx,
+        Register.ecx,
+        Register.r8d,
+        Register.r9d,
+
+        Register.eax,
+        
+        Register.ebx,
+        Register.r12d,
+        Register.r13d,
+        Register.r14d,
+        Register.r15d,
+    ];
+
+    //用于传参的寄存器
+    static paramRegisters32:Register[] = [
+        Register.edi,
+        Register.esi,
+        Register.edx,
+        Register.ecx,
+        Register.r8d,
+        Register.r9d,
+    ];
+
+    //Callee保护的寄存器
+    static calleeProtected32:Register[] = [
+        Register.ebx,
+        Register.r12d,
+        Register.r13d,
+        Register.r14d,
+        Register.r15d,
+    ];
+
+    //Caller保护的寄存器
+    static callerProtected32:Register[] = [
+        Register.edi,
+        Register.esi,
+        Register.edx,
+        Register.ecx,
+        Register.r8d,
+        Register.r9d,
+
+        Register.r10d,
+        Register.r11d,
+
+        Register.eax,
+    ];
+
+    //64位寄存器
+    //参数用的寄存器，当然也要由caller保护
+    static rdi = new Register("rdi",64);
+    static rsi = new Register("rsi",64);
+    static rdx = new Register("rdx",64);
+    static rcx = new Register("rcx",64);
+    static r8 = new Register("r8",64);
+    static r9 = new Register("r9",64);
+
+    //通用寄存器:caller（调用者）负责保护
+    static r10 = new Register("r10",64);
+    static r11 = new Register("r11",64);
+
+    //返回值，也由Caller保护
+    static rax = new Register("rax",64);
+
+    //通用寄存器:callee（调用者）负责保护
+    static rbx = new Register("rbx",64);
+    static r12 = new Register("r12",64);
+    static r13 = new Register("r13",64);
+    static r14 = new Register("r14",64);
+    static r15 = new Register("r15",64);
+
+    //栈顶和栈底
+    static rsp = new Register("rsp",64);
+    static rbp = new Register("rbp",64);
+
+    //64位的可供分配的寄存器
+    static registers64:Register[] = [
+        Register.rax,
+
+        Register.r10,
+        Register.r11,
+        
+        Register.rdi,
+        Register.rsi,
+        Register.rdx,
+        Register.rcx,
+        Register.r8,
+        Register.r9,
+        
+        Register.rbx,
+        Register.r12,
+        Register.r13,
+        Register.r14,
+        Register.r15,
+    ];
+
+    //Callee保护的寄存器
+    static calleeProtected64:Register[] = [
+        Register.rbx,
+        Register.r12,
+        Register.r13,
+        Register.r14,
+        Register.r15,
+    ];
+
+    //Caller保护的寄存器
+    static callerProtected64:Register[] = [
+        Register.rdi,
+        Register.rsi,
+        Register.rdx,
+        Register.rcx,
+        Register.r8,
+        Register.r9,
+        
+        Register.r10,
+        Register.r11,
+        
+        Register.rax,
+    ];
+  
+    toString():string{
+        return "%"+this.value;
+    }
+}
+
+/**
+ * 内存寻址
+ * 这是个简化的版本，只支持基于寄存器的偏移量
+ * 后面根据需要再扩展。
+ */
+class MemAddress extends Oprand{
+    register:Register;
+    offset:number;
+    constructor(register:Register, offset:number){
+        super(OprandKind.memory,'undefined')
+        this.register = register;
+        this.offset = offset;
+    }
+    toString():string{
+        //输出结果类似于：8(%rbp)
+        //如果offset为0，那么不显示，即：(%rbp)
+        return (this.offset == 0 ? "" : this.offset) + "("+this.register.toString()+")";
+    }
+}
+
+/**
+ * 对AsmModule做Lower处理。
+ * 1.把寄存器改成具体的物理寄存器
+ * 2.把本地变量也换算成具体的内存地址
+ * 3.把抽象的指令转换成具体的指令
+ * 4.计算标签名称
+ * 5.添加序曲和尾声
+ * 6.内存对齐
+ * @param asmModule 
+ */
+
+ class Lower{
+     //前一步生成的LIR模型
+    asmModule:AsmModule;
+
+    //当前的FunctionSymbol
+    functionSym:FunctionSymbol|null = null;
+
+    //变量活跃性分析的结果
+    livenessResult:LivenessResult;
+    
+    //当前函数使用到的那些Callee保护的寄存器
+    usedCalleeProtectedRegs:Register[] = [];
+
+    //当前函数的参数数量
+    numParams = 0;
+
+    //保存已经被Lower的Oprand，用于提高效率
+    loweredVars:Map<number,Oprand> = new Map();
+
+    //需要在栈里保存的为函数传参（超过6个之后的参数）保留的空间，每个参数占8个字节
+    numArgsOnStack = 0;
+
+    //rsp应该移动的量。这个量再加8就是该函数所对应的栈桢的大小，其中8是callq指令所压入的返回地址
+    rspOffset = 0;
+
+    //是否使用RedZone，也就是栈顶之外的128个字节
+    canUseRedZone = false;
+
+    //预留的寄存器。
+    //主要用于在调用函数前，保护起那些马上就要用到的寄存器，不再分配给其他变量。
+    reservedRegisters:Register[] = [];
+
+    //spill的register在内存中的位置。
+    spillOffset:number = 0;
+
+    //被spill的变量
+    //key是varIndex，value是内存地址
+    spilledVars2Address:Map<number,MemAddress> = new Map();  
+
+    //key是varIndex，value是原来的寄存器
+    spilledVars2Reg:Map<number, Register> = new Map();
+
+    constructor(asmModule:AsmModule, livenessResult:LivenessResult){
+        this.asmModule = asmModule;
+        this.livenessResult = livenessResult;
+    }
+
+    lowerModule() {
+        let newFun2Code:Map<FunctionSymbol, BasicBlock[]> = new Map();
+        let funIndex = 0;
+        for (let fun of this.asmModule.fun2Code.keys()){
+            let bbs = this.asmModule.fun2Code.get(fun) as BasicBlock[];
+            let newBBs = this.lowerFunction(fun, bbs, funIndex++);
+            newFun2Code.set(fun,newBBs);
+        }
+        this.asmModule.fun2Code = newFun2Code;
+    }
+
+    private lowerFunction(functionSym:FunctionSymbol, bbs:BasicBlock[], funIndex:number):BasicBlock[]{
+        //初始化一些状态变量
+        this.initStates(functionSym);
+
+        //Lower参数
+        this.lowerParams();
+
+        //lower每个BasicBlock中的指令
+        for (let i = 0; i< bbs.length; i++){
+            let bb = bbs[i];
+            let newInsts:Inst[] = [];
+            this.lowerBB(bb, newInsts);
+            bb.insts = newInsts;
+        }
+
+        //是否可以使用RedZone
+        //需要是叶子函数，并且对栈外空间的使用量小于128个字节，也就是32个整数
+        let isLeafFunction = this.asmModule.isLeafFunction.get(functionSym) as boolean;       
+        if (isLeafFunction){
+            let bytes = this.spillOffset +this.numArgsOnStack*8 +this.usedCalleeProtectedRegs.length*8;
+            this.canUseRedZone = bytes < 128;
+        }
+
+        //添加序曲
+        //新增加一个BasicBlock
+        let bb = new BasicBlock();
+        bb.bbIndex == -1;
+        bbs.unshift(bb);
+
+        bbs[0].insts = this.addPrologue(bbs[0].insts);
+
+        //添加尾声
+        let lastBB = bbs[bbs.length-1];
+        let tailCall = lastBB.insts.length>0 && lastBB.insts[lastBB.insts.length-1].op == OpCode.tailCallJmp;
+        if (!tailCall){
+            this.addEpilogue(bbs[bbs.length-1].insts);
+        }
+
+        //为尾调用添加基本块和尾声代码
+        let additionalBBs:BasicBlock[] = [];
+        for(let bb of bbs){
+            if (bb.insts.length>0){
+                let lastInst = bb.insts[bb.insts.length-1];
+                if (lastInst.op == OpCode.tailCallJmp){
+                    bb.insts.pop();
+                    let bbEndPoint = new BasicBlock();
+                    additionalBBs.push(bbEndPoint);
+                    bb.insts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb, bbEndPoint),lastInst.comment));
+                    lastInst.op = OpCode.jmp;
+                    this.addEpilogue(bbEndPoint.insts, lastInst);
+                    console.log("bbEndPoint");
+                    for (let inst of bbEndPoint.insts){
+                        console.log(inst);
+                    }
+                }
+            }
+        }
+        for (let bb of additionalBBs){
+            bbs.push(bb);
+        }
+
+        //Lower基本块的标签和跳转指令。
+        let newBBs = this.lowerBBLabelAndJumps(bbs,funIndex);
+
+        //把spilledVars中的地址修改一下，加上CalleeProtectedReg所占的空间
+        if (this.usedCalleeProtectedRegs.length >0){
+            let offset = this.usedCalleeProtectedRegs.length*8;
+            for (let address of this.spilledVars2Address.values()){
+                let oldValue = address.value as number;
+                address.value = oldValue+offset;
+            }
+        }
+
+        // console.log(this);   //打印一下，看看状态变量是否对。
+
+        return newBBs;
+    }
+
+    private lowerParams(){
+        for (let i:number = 0; i< this.numParams;i++){
+            if (i<6){
+                let reg = Register.paramRegisters32[i];
+                this.assignRegToVar(i, reg);
+            }
+            else{
+                //从Caller的栈里访问参数
+                let offset = (i - 6)*8 + 16;  //+16是因为有一个callq压入的返回地址，一个pushq rbp又加了8个字节
+                let oprand = new MemAddress(Register.rbp,offset);   
+                this.loweredVars.set(i, oprand);
+            }
+        }
+    }
+
+    /**
+     * 初始化当前函数的一些状态变量，在算法中会用到它们
+     * @param functionSym 
+     */
+    private initStates(functionSym:FunctionSymbol){
+        this.functionSym = functionSym;
+        this.usedCalleeProtectedRegs=[];
+        this.numParams = functionSym.getNumParams();
+        this.numArgsOnStack = 0;
+        this.rspOffset = 0;
+        this.loweredVars.clear();
+        this.spillOffset = 0;
+        this.spilledVars2Address.clear();
+        this.spilledVars2Reg.clear();
+        this.reservedRegisters = []; 
+        this.canUseRedZone = false;       
+    }
+
+    //添加序曲
+    private addPrologue(insts:Inst[]):Inst[]{
+        let newInsts:Inst[] = [];
+
+        //保存rbp的值
+        newInsts.push(new Inst_1(OpCode.pushq, Register.rbp));
+
+        //把原来的栈顶保存到rbp,成为现在的栈底
+        newInsts.push(new Inst_2(OpCode.movq, Register.rsp, Register.rbp));
+
+        //计算栈顶指针需要移动多少位置
+        //要保证栈桢16字节对齐
+        if (!this.canUseRedZone){
+            this.rspOffset = this.spillOffset + this.numArgsOnStack*8;
+            //当前占用的栈空间，还要加上Callee保护的寄存器占据的空间
+            let rem = (this.rspOffset + this.usedCalleeProtectedRegs.length*8)%16;
+
+            if(rem == 8){
+                this.rspOffset += 8;
+            }
+            else if ( rem == 4){
+                this.rspOffset += 12;
+            }
+            else if (rem == 12){
+                this.rspOffset += 4;
+            }
+
+            if(this.rspOffset > 0)
+                newInsts.push(new Inst_2(OpCode.subq, new Oprand(OprandKind.immediate,this.rspOffset), Register.rsp));
+        }
+
+        //保存Callee负责保护的寄存器
+        this.saveCalleeProtectedRegs(newInsts);
+
+        //合并原来的指令
+        newInsts = newInsts.concat(insts);
+
+        return newInsts;
+    }
+
+    //添加尾声
+    private addEpilogue(newInsts:Inst[], inst:Inst = new Inst_0(OpCode.retq)){
+        //恢复Callee负责保护的寄存器
+        this.restoreCalleeProtectedRegs(newInsts);
+
+        //缩小栈桢
+        if (!this.canUseRedZone && this.rspOffset > 0){
+            newInsts.push(new Inst_2(OpCode.addq, new Oprand(OprandKind.immediate,this.rspOffset), Register.rsp));
+        }
+
+        //恢复rbp的值
+        newInsts.push(new Inst_1(OpCode.popq, Register.rbp));
+
+        //添加返回指令，或者是由尾调用产生的jump指令。
+        newInsts.push(inst);
+    }
+    
+     //去除空的BasicBlock，给BasicBlock编号，把jump指令也lower
+     private lowerBBLabelAndJumps(bbs:BasicBlock[], funIndex:number):BasicBlock[]{
+        let newBBs:BasicBlock[] = [];
+        let bbIndex = 0;
+        //去除空的BasicBlock，并给BasicBlock编号
+        for (let i = 0; i< bbs.length; i++){
+            let bb = bbs[i];
+            //如果是空的BasicBlock，就跳过
+            if (bb.insts.length>0){
+                bb.funIndex = funIndex;
+                bb.bbIndex = bbIndex++;
+                newBBs.push(bb);
+            }
+            else{
+                //如果有一个BasicBlock指向该block，那么就指向下一个block;
+                for (let j = 0; j< bbs.length;j++){
+                    let lastInst = bbs[j].insts[bbs[j].insts.length-1];
+                    if (OpCodeHelper.isJump(lastInst.op)){
+                        let jumpInst = lastInst as Inst_1;
+                        let destBB = jumpInst.oprand.value as BasicBlock;
+                        if (destBB == bb){
+                            jumpInst.oprand.value = bbs[i+1];
+                        }
+                    }
+                }
+            }
+        }
+
+        //把jump指令的操作数lower一下,从BasicBlock变到标签
+        for (let i = 0; i<newBBs.length;i++){
+            let insts = newBBs[i].insts;
+            let lastInst = insts[insts.length-1];
+            if (OpCodeHelper.isJump(lastInst.op) && (lastInst as Inst_1).oprand.kind == OprandKind.bb){ //jump指令
+                let jumpInst = lastInst as Inst_1;
+                let bbDest = jumpInst.oprand.value as BasicBlock;
+                //去除不必要的jmp指令。如果仅仅是跳到下一个基本块，那么不需要这个jmp指令。
+                if(lastInst.op == OpCode.jmp && newBBs.indexOf(bbDest) == i+1){
+                    insts.pop();
+                }
+                else{
+                    jumpInst.oprand.value = bbDest.getName();
+                    jumpInst.oprand.kind = OprandKind.label;
+                    bbDest.isDestination = true;  //有其他block跳到这个block
+                }
+            }
+        }
+
+        return newBBs;
+    }
+
+
+    /**
+     * Lower指令
+     * @param insts 
+     * @param newInsts 
+     */
+    private lowerBB(bb:BasicBlock, newInsts:Inst[]){
+        let insts = bb.insts;
+        let varsToSpill : number[] =[];
+        for(let i = 0; i < insts.length; i++){
+            let inst = insts[i];
+            let liveVars = this.livenessResult.liveVars.get(inst) as number[];
+            //两个操作数
+            if (Inst_2.isInst_2(inst)){
+                let inst_2 = inst as Inst_2;
+                inst_2.comment = inst_2.toString();
+                inst_2.oprand1 = this.lowerOprand(liveVars, inst_2.oprand1, newInsts);
+                inst_2.oprand2 = this.lowerOprand(liveVars, inst_2.oprand2, newInsts);
+
+                //对mov再做一次优化
+                if (!(inst_2.op == OpCode.movl && inst_2.oprand1 == inst_2.oprand2)){
+                    newInsts.push(inst_2);
+                }
+            }
+            //1个操作数
+            else if (Inst_1.isInst_1(inst)){                
+                let inst_1 = inst as Inst_1;
+                inst_1.oprand = this.lowerOprand(liveVars, inst_1.oprand, newInsts);
+
+                if (inst.op != OpCode.declVar){ //忽略变量声明的伪指令。
+                    //处理函数调用
+                    //函数调用前后，要设置参数；
+                    if (inst_1.op == OpCode.callq || inst_1.op == OpCode.tailRecursive || inst_1.op == OpCode.tailCall){
+                        let liveVarsAfterCall = (i==insts.length-1) 
+                                ? (this.livenessResult.initialVars.get(bb) as number[]) 
+                                    : (this.livenessResult.liveVars.get(insts[i+1]) as number[]);
+                        varsToSpill = this.lowerFunctionCall(inst_1, liveVars, liveVarsAfterCall, newInsts);
+                    }
+                    else{
+                        newInsts.push(inst_1);
+                    }
+                }
+            }
+            //没有操作数
+            else{
+                if(inst.op == OpCode.reload){
+                    //如果是最后一条指令，或者下一条指令就是return，那么就不用reload了
+                    if (i != insts.length-1 && !OpCodeHelper.isReturn(insts[i+1].op)){
+                        for (let i = 0; i < varsToSpill.length; i++){
+                            let varIndex = varsToSpill[i];
+                            this.reloadVar(varIndex, newInsts);
+                        }
+                        varsToSpill = [];
+                    }
+                }
+                else{
+                    newInsts.push(inst);
+                }
+            }
+        }
+    }
+
+    /**
+     * 处理函数调用。
+     * 需要保存Caller负责保护的寄存器。
+     * @param inst_1 
+     * @param liveVars          函数调用时的活跃变量
+     * @param liveVarsAfterCall 函数调用之后的活跃变量
+     * @param newInsts 
+     */
+    private lowerFunctionCall(inst_1:Inst_1, liveVars:number[], liveVarsAfterCall:number[], newInsts:Inst[]):number[]{
+        let functionOprand = inst_1.oprand as FunctionOprand;
+        let args = functionOprand.args;
+        let saveCallerProtectedRegs = (inst_1.op == OpCode.callq);
+
+        //需要在栈桢里为传参保留的空间
+        let numArgs = args.length;
+        if(numArgs > 6 && numArgs-6> this.numArgsOnStack){
+            this.numArgsOnStack = numArgs-6;
+        }
+
+        //保存Caller负责保护的寄存器
+        let varsToSpill:number[]= [];
+        let regsToSpill:Register[] = [];
+
+        //保护那些在函数调用之后，仍然会被使用使用的CallerProtected寄存器
+        //将这些位置预留下来
+        if (saveCallerProtectedRegs){
+            for (let varIndex of liveVarsAfterCall){
+                let oprand = this.loweredVars.get(varIndex) as Oprand;
+                if (oprand.kind == OprandKind.register && 
+                    Register.callerProtected32.indexOf(oprand as Register) != -1){
+                    varsToSpill.push(varIndex);
+                    regsToSpill.push(oprand as Register);
+                }
+            }
+        }
+        
+        //参数的位置要保留下来
+        for (let j = 0; j < numArgs && j<6; j++){
+            this.reservedRegisters.push(Register.paramRegisters32[j]);            
+        }
+        //eax也要预留出来，防止spill过程中，其他寄存器的值被挪到这里来。
+        this.reservedRegisters.push(Register.eax);
+
+        //把前6个参数设置到寄存器
+        //并且把需要覆盖的reg溢出
+        let regsSpilled : Register[] = []; 
+        for (let j = 0; j < numArgs && j<6; j++){
+            let source:Oprand = this.lowerOprand(liveVars, args[j], newInsts);
+            
+            let regDest = Register.paramRegisters32[j];  
+
+            //如果是尾递归和尾调用，不需要保护寄存器
+            //实际上，这个时候如何计算活跃变量的集合，应该也会是空集
+            if(saveCallerProtectedRegs){
+                let index = regsToSpill.indexOf(regDest);
+                if (index !=-1){
+                    let varIndex = varsToSpill[index];
+                    this.spillVar(varIndex,regDest,newInsts);
+                    regsSpilled.push(regDest);
+                }
+            }
+
+            if (regDest !== source)
+                newInsts.push(new Inst_2(OpCode.movl, source, regDest)); 
+        }
+
+        if(saveCallerProtectedRegs){
+            //Spill剩余的寄存器
+            for (let i:number = 0; i< regsToSpill.length; i++){
+                if (regsSpilled.indexOf(regsToSpill[i])){
+                    this.spillVar(varsToSpill[i], regsToSpill[i],newInsts);
+                }
+            }
+        }
+ 
+        //超过6个之后的参数是放在栈桢里的，并要移动栈顶指针
+        if(args.length > 6){
+            //参数是倒着排的。
+            //栈顶是参数7，再往上，依次是参数8、参数9...
+            //在Callee中，会到Caller的栈桢中去读取参数值
+            for(let j = 6; j < numArgs; j++){
+                let offset = (j-6)*8; 
+                //如果args[j]是变量，则要放到寄存器里
+                let oprand = this.lowerOprand(liveVars, args[j], newInsts, args[j].kind == OprandKind.varIndex);
+                newInsts.push(new Inst_2(OpCode.movl, oprand, new MemAddress(Register.rsp, offset)));
+            }
+        }
+
+        // //lower操作数，处理尾递归和尾调用
+        // if(inst_1.op == OpCode.tailRecursive){
+        //     //找出第一个基本块
+        //     let bbs = this.asmModule.fun2Code.get(this.functionSym as FunctionSymbol) as BasicBlock[];
+        //     newInsts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb, bbs[0])));
+        // }
+        // else if (inst_1.op == OpCode.tailCall){
+        //     //把栈桢整个缩回来，让被调用的函数可以尽量复用当前的栈桢
+        //     newInsts.push(new Inst_2(OpCode.movl, Register.rbp, Register.rsp));
+        //     //继续做函数调用
+        //     newInsts.push(inst_1);
+        // }
+        // else{
+        //     //调用函数
+        //     newInsts.push(inst_1);
+        // }
+
+        //对于尾递归和尾调用，不生成call指令。而是去Lower在return语句中，生成的连个特殊的jmp指令。
+        if(inst_1.op != OpCode.tailRecursive && inst_1.op != OpCode.tailCall){
+            newInsts.push(inst_1);
+        }
+
+        //清除预留的寄存器
+        this.reservedRegisters = [];
+
+        return varsToSpill;
+    }
+
+    /**
+     * Lower操作数。
+     * 主要任务是给变量分配物理寄存器或内存地址。
+     * 分配寄存器有几种场景：
+     * 1.不要求返回值的类型
+     * 如果操作数是源操作数，那么可以是寄存器，也可以是内存地址。优先分配寄存器。如果寄存器不足，则直接溢出到内存。
+     * 2.要求返回值不能是内存地址
+     * 如果操作数需要一个寄存器（典型的是加减乘除操作的一个操作数已经是内存地址了），那么就要分配一个寄存器给另一个寄存器。
+     * 如果之前已经分配过了，并且不是寄存器，那么就溢出到内存。
+     * 
+     * @param oprand 
+     */
+    private lowerOprand(liveVars:number[], oprand:Oprand, newInsts:Inst[], noMemory:boolean = false):Oprand{
+        let newOprand = oprand;
+        
+        let aa = false;
+        let found = false;
+        //变量
+        if(oprand.kind == OprandKind.varIndex){
+            let varIndex:number = oprand.value as number;  
+            if (varIndex == 0) {
+                console.log("varIndex == 0"); 
+                console.log(this.loweredVars);
+                aa = true;
+            }
+
+            if (this.loweredVars.has(varIndex)){
+                if (varIndex == 0) {
+                    console.log("varIndex == 0, find in lowered vars");
+                    found = true;
+                }
+            
+                newOprand = this.loweredVars.get(varIndex) as Oprand; 
+                if (noMemory && newOprand.kind == OprandKind.memory){
+                    newOprand = this.reloadVar(varIndex, newInsts) as Register;
+                }
+            }
+            else{ 
+                let reg = this.getFreeRegister(liveVars);
+                if (reg == null){
+                    reg = this.spillARegister(newInsts) as Register;
+                }
+                this.assignRegToVar(varIndex,reg);        
+            }
+        }
+        //返回值
+        else if (oprand.kind == OprandKind.returnSlot){
+            //因为返回值总是代码的最后一行，所以破坏掉里面的值也没关系
+            newOprand = Register.eax;  
+        }
+
+        if (aa) 
+            console.log(newOprand);
+
+        if (aa && !found)
+            console.log(this.loweredVars);
+
+        return newOprand;
+    }
+
+    /**
+     * 将某个变量溢出到内存。
+     * @param varIndex 
+     * @param reg 
+     */
+    private spillVar(varIndex:number, reg:Register, newInsts:Inst[]):MemAddress{
+        let address:MemAddress;
+        if(this.spilledVars2Address.has(varIndex)){
+            address = this.spilledVars2Address.get(varIndex) as MemAddress
+        }
+        else{
+            this.spillOffset += 4;
+            address = new MemAddress(Register.rbp, -this.spillOffset);
+            this.spilledVars2Address.set(varIndex, address);
+            this.spilledVars2Reg.set(varIndex, reg);
+        }
+        newInsts.push(new Inst_2(OpCode.movl, reg, address, "spill\tvar"+varIndex));
+        this.loweredVars.set(varIndex, address);
+        return address;
+    }
+
+    private reloadVar(varIndex:number,newInsts:Inst[]):Register|null{
+        let oprand = this.loweredVars.get(varIndex) as Oprand;
+        if (oprand.kind == OprandKind.memory){
+            let address = oprand as MemAddress;
+            let reg = this.spilledVars2Reg.get(varIndex) as Register;
+            //查看该reg是否正在被其他变量占用
+            for (let varIndex1 of this.loweredVars.keys()){
+                let oprand1 = this.loweredVars.get(varIndex1);
+                if (oprand1 == reg){
+                    this.spillVar(varIndex, oprand1 as Register, newInsts);
+                    break;
+                }
+            }
+            this.assignRegToVar(varIndex, reg);
+            newInsts.push(new Inst_2(OpCode.movl, address, reg, "reload\tvar" + varIndex));
+            return reg;
+        }
+        return null;
+    }
+
+    /**
+     * 选一个寄存器，溢出出去。
+     */
+    private spillARegister(newInsts:Inst[]):Register|null{
+          for (let varIndex of this.loweredVars.keys()){
+            let oprand = this.loweredVars.get(varIndex) as Oprand;
+            if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)!=-1){
+                this.spillVar(varIndex, oprand as Register, newInsts);
+            }
+        }
+
+        //理论上，不会到达这里。
+        return null;
+    }
+
+    private assignRegToVar(varIndex:number, reg:Register){
+        //更新usedCalleeProtectedRegs
+        if(Register.calleeProtected32.indexOf(reg) != -1 && this.usedCalleeProtectedRegs.indexOf(reg) == -1){
+            this.usedCalleeProtectedRegs.push(reg);
+        }
+        //更新loweredVars
+        this.loweredVars.set(varIndex,reg);
+    }
+
+    /**
+     * 获取一个空余的寄存器
+     * @param liveVars 
+     */
+    private getFreeRegister(liveVars:number[]):Register|null{
+        let result:Register|null = null;
+
+        //1.从空余的寄存器中寻找一个。
+        let allocatedRegisters:Register[] = [];
+        this.loweredVars.forEach((oprand,varIndex)=>{
+            //已经lower了的每个变量，都会锁定一个寄存器。
+            if(oprand.kind == OprandKind.register){
+                allocatedRegisters.push(oprand as Register);
+            }
+            else{
+                allocatedRegisters.push(this.spilledVars2Reg.get(varIndex) as Register);
+            }
+            });
+        
+        for (let reg of Register.registers32){
+            if (allocatedRegisters.indexOf(reg) == -1 && this.reservedRegisters.indexOf(reg)==-1){
+                result = reg;
+                break;
+            }
+        }
+
+        //2.从已分配的varIndex里面找一个
+        // if (result == null){
+        //     for (let varIndex of this.loweredVars.keys()){
+        //         // todo 下面的逻辑是不安全的，在存在cfg的情况下，不能简单的判断变量是否真的没用了。
+        //         if (liveVars.indexOf(varIndex) == -1){
+        //             let oprand = this.loweredVars.get(varIndex) as Oprand;
+        //             if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)==-1){
+        //                 result = oprand as Register;
+        //                 this.loweredVars.delete(varIndex);
+        //                 break;
+        //             }
+        //         }
+        //     }
+        // }
+        return result;
+    }
+
+    private saveCalleeProtectedRegs(newInsts:Inst[]){
+        for (let i = 0; i< this.usedCalleeProtectedRegs.length; i++){
+            let regIndex = Register.calleeProtected32.indexOf(this.usedCalleeProtectedRegs[i]);
+            let reg64 = Register.calleeProtected64[regIndex];
+            newInsts.push(new Inst_1(OpCode.pushq, reg64));
+        }
+    }
+
+    private restoreCalleeProtectedRegs(newInsts:Inst[]){
+        for (let i=this.usedCalleeProtectedRegs.length-1; i>=0; i--){
+            let regIndex = Register.calleeProtected32.indexOf(this.usedCalleeProtectedRegs[i]);
+            let reg64 = Register.calleeProtected64[regIndex];
+            newInsts.push(new Inst_1(OpCode.popq, reg64));
+        }
+    }
+
+}
+
+export function compileToAsm(prog:Prog, verbose:boolean):string{
+    let asmGenerator = new AsmGenerator();
+
+    //生成LIR
+    let asmModule = asmGenerator.visit(prog) as AsmModule;
+
+    if (verbose){
+        console.log("在Lower之前：");
+        console.log(asmModule.toString());
+    }
+
+    //变量活跃性分析
+    let livenessAnalyzer = new LivenessAnalyzer(asmModule);
+    let result = livenessAnalyzer.execute();
+    
+    // if(verbose){
+        console.log("liveVars");
+        for (let fun of asmModule.fun2Code.keys()){
+            console.log("\nfunction: " + fun.name)
+            let bbs = asmModule.fun2Code.get(fun) as BasicBlock[];
+            for (let bb of bbs){
+                console.log("\nbb:"+bb.getName());
+                for (let inst of bb.insts){
+                    let vars = result.liveVars.get(inst);
+                    console.log(vars);
+                    console.log(inst.toString());
+                }
+                console.log(result.initialVars.get(bb));
+            }
+        }
+    // }
+
+    // Lower
+    let lower = new Lower(asmModule, result);
+    lower.lowerModule();
+
+    let asm = asmModule.toString();
+    if (verbose){
+        console.log("在Lower之后：");
+        console.log(asm);
+    }
+
+    return asm;
+}
+
+/**
+ * 变量活跃性分析的结果
+ */
+class LivenessResult{
+    liveVars:Map<Inst, number[]> = new Map();
+    initialVars:Map<BasicBlock, number[]> = new Map();
+}
+
+/**
+ * 控制流图
+ */
+class CFG{
+    //基本块的列表。第一个和最后一个BasicBlock是图的root。
+    bbs:BasicBlock[];
+
+    //每个BasicBlock输出的边
+    edgesOut:Map<BasicBlock, BasicBlock[]>=new Map();
+
+    //每个BasicBlock输入的边
+    edgesIn:Map<BasicBlock,BasicBlock[]> = new Map();
+
+    constructor(bbs:BasicBlock[]){
+        this.bbs = bbs;
+        this.buildCFG();
+    }
+
+    private buildCFG(){
+        //构建edgesOut;
+        for (let i:number = 0; i < this.bbs.length-1; i++){ //最后一个基本块不用分析
+            let bb = this.bbs[i];
+            let toBBs:BasicBlock[] = [];
+            this.edgesOut.set(bb,toBBs);
+            let lastInst = bb.insts[bb.insts.length -1];
+            if (OpCodeHelper.isJump(lastInst.op)){
+                let jumpInst = lastInst as Inst_1;
+                let destBB = jumpInst.oprand.value as BasicBlock;
+                toBBs.push(destBB);
+                //如果是条件分枝，那么还要加上下面紧挨着的BasicBlock
+                if (jumpInst.op != OpCode.jmp){
+                    toBBs.push(this.bbs[i+1]);
+                }
+            }
+            else{ //如果最后一条语句不是跳转语句，则连接到下一个BB
+                toBBs.push(this.bbs[i+1]);
+            }
+
+        }
+
+        //构建反向的边:edgesIn
+        for (let bb of this.edgesOut.keys()){
+            let toBBs = this.edgesOut.get(bb) as BasicBlock[];
+            for (let toBB of toBBs){
+                let fromBBs = this.edgesIn.get(toBB);
+                if (typeof fromBBs == 'undefined'){
+                    fromBBs = [];
+                    this.edgesIn.set(toBB, fromBBs);
+                }
+                fromBBs.push(bb);
+            }
+        }
+    }
+
+    toString():string{
+        let str = "";
+        str += "bbs:\n";
+        for (let bb of this.bbs){
+            str += "\t"+bb.getName() + "\n";
+        }
+
+        str += "edgesOut:\n";
+        for (let bb of this.edgesOut.keys()){
+            str += "\t"+bb.getName()+"->\n";
+            let toBBs = this.edgesOut.get(bb) as BasicBlock[];
+            for (let bb2 of toBBs){
+                str += "\t\t"+bb2.getName()+"\n";
+            }
+        }
+
+        str += "edgesIn:\n";
+        for (let bb of this.edgesIn.keys()){
+            str += "\t"+bb.getName()+"<-\n";
+            let fromBBs = this.edgesIn.get(bb) as BasicBlock[];
+            for (let bb2 of fromBBs){
+                str += "\t\t"+bb2.getName()+"\n";
+            }
+        }
+        return str;
+    }
+}
+
+/**
+ * 变量活跃性分析。
+ */
+class LivenessAnalyzer{
+    asmModule:AsmModule;
+    constructor(asmModule:AsmModule){
+        this.asmModule = asmModule;
+    }
+
+    execute():LivenessResult{
+        let result = new LivenessResult();
+
+        for (let fun of this.asmModule.fun2Code.keys()){
+            let bbs = this.asmModule.fun2Code.get(fun) as BasicBlock[];
+            this.analyzeFunction(bbs, result);   
+        }
+
+        return result;
+    }
+
+    /**
+     * 给一个函数做变量活跃性分析。
+     * 每个函数的CFG是一个有角的图（rooted graph）。
+     * 我们多次遍历这个图，每次一个基本块的输出会作为另一个基本块的输入。
+     * 只有当遍历的时候，没有活跃变量的集合发生变化，算法才结束。
+     * @param fun 
+     * @param bbs 
+     * @param funIndex 
+     * @param result 
+     */
+    private analyzeFunction(bbs:BasicBlock[], result:LivenessResult){
+        let cfg = new CFG(bbs);
+
+        console.log(cfg.toString());
+
+        //做一些初始化工作
+        for (let bb of bbs){
+            result.initialVars.set(bb,[]);
+        }
+
+        //持续遍历图，直到没有BasicBlock的活跃变量需要被更新
+        let bbsToDo:BasicBlock[] = bbs.slice(0);
+        while (bbsToDo.length>0){
+            let bb = bbsToDo.pop() as BasicBlock;
+            this.analyzeBasicBlock(bb, result);
+            //取出第一行的活跃变量集合，作为对前面的BasicBlock的输入
+            let liveVars = bb.insts.length == 0? [] : (result.liveVars.get(bb.insts[0]) as number[]); 
+            let fromBBs = cfg.edgesIn.get(bb);
+            if (typeof fromBBs != 'undefined'){
+                for (let bb2 of fromBBs){
+                    let liveVars2 = result.initialVars.get(bb2) as number[];
+                    //如果能向上面的BB提供不同的活跃变量，则需要重新分析bb2
+                    if (!this.isSubsetOf(liveVars, liveVars2)){
+                        if (bbsToDo.indexOf(bb2) == -1)
+                            bbsToDo.push(bb2);
+                        let unionVars = this.unionOf(liveVars, liveVars2);
+                        result.initialVars.set(bb2, unionVars);
+                    }
+                }
+            }
+        }
+
+    }
+
+    /**
+     * set1是不是set2的子集
+     * @param set1 
+     * @param set2 
+     */
+    private isSubsetOf(set1:number[], set2:number[]):boolean{
+        if(set1.length <= set2.length){
+            for (let n of set1){
+                if (set2.indexOf(n)==-1){
+                    return false;
+                }
+            }
+            return true;
+        }
+        else{
+            return false;
+        }
+    }
+
+    /**
+     * 返回set1和set2的并集
+     * @param set1 
+     * @param set2 
+     */
+    private unionOf(set1:number[], set2:number[]):number[]{
+        let set3:number[] = set1.slice(0);
+        for (let n of set2){
+            if (set3.indexOf(n) == -1){
+                set3.push(n);
+            }
+        }
+        return set3;
+    }
+
+    /**
+     * 给基本块做活跃性分析。
+     * 算法：从基本块的最后一条指令倒着做分析。
+     * @param bb 
+     * @param result 
+     */
+    private analyzeBasicBlock(bb:BasicBlock, result:LivenessResult):boolean{
+        let changed = false;
+
+        //找出BasicBlock初始的集合
+        let vars = result.initialVars.get(bb) as number[];
+        vars = vars.slice(0); //克隆一份
+
+        //为每一条指令计算活跃变量集合
+        for (let i = bb.insts.length - 1; i >=0; i--){
+            let inst = bb.insts[i];
+            if (inst.numOprands == 1){
+                let inst_1 = inst as Inst_1;
+                //变量声明伪指令，从liveVars集合中去掉该变量
+                if (inst_1.op == OpCode.declVar){
+                    let varIndex = inst_1.oprand.value as number;
+                    let indexInArray = vars.indexOf(varIndex);
+                    if (indexInArray != -1){
+                        vars.splice(indexInArray,1);
+                    }
+                }
+                //查看指令中引用了哪个变量，就加到liveVars集合中去
+                else{
+                    this.updateLiveVars(inst_1, inst_1.oprand, vars);
+                }
+            }
+            else if (inst.numOprands == 2){
+                let inst_2 = inst as Inst_2;
+                this.updateLiveVars(inst_2, inst_2.oprand1, vars);
+                this.updateLiveVars(inst_2, inst_2.oprand2, vars);
+            } 
+    
+            result.liveVars.set(inst, vars);
+            vars = vars.slice(0); //克隆一份，用于下一条指令
+        }
+
+        return changed;
+    }
+
+    /**
+     * 把操作数用到的变量增加到当前指令的活跃变量集合里面。
+     * @param inst 
+     * @param oprand 
+     * @param vars 
+     */
+    private updateLiveVars(inst:Inst, oprand:Oprand, vars:number[]){
+        if (oprand.kind == OprandKind.varIndex){
+            let varIndex = oprand.value as number;
+            if (vars.indexOf(varIndex)== -1){
+                vars.push(varIndex);
+            }
+        }
+        else if (oprand.kind == OprandKind.function){
+            let functionOprand = oprand as FunctionOprand;
+            for (let arg of functionOprand.args){
+                this.updateLiveVars(inst, arg, vars);
+            }
+        }
+    }
+
+}
+
