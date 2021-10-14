@@ -11,9 +11,8 @@ _foo:                                   ## @foo
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
 	leaq	L_.str(%rip), %rdi
-	callq	_println_cs
 	popq	%rbp
-	retq
+	jmp	_println_cs                     ## TAILCALL
 	.cfi_endproc
                                         ## -- End function
 	.section	__TEXT,__literal8,8byte_literals
@@ -31,28 +30,28 @@ _main:                                  ## @main
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$32, %rsp
+	pushq	%rbx
+	pushq	%rax
+	.cfi_offset %rbx, -24
 	leaq	L_.str(%rip), %rdi
 	callq	_println_cs
 	leaq	L_.str.1(%rip), %rdi
 	callq	_string_create_by_cstr
-	movq	%rax, -8(%rbp)
+	movq	%rax, %rbx
 	leaq	L_.str.2(%rip), %rdi
 	callq	_string_create_by_cstr
-	movq	%rax, -16(%rbp)
-	movq	-8(%rbp), %rdi
-	movq	-16(%rbp), %rsi
+	movq	%rbx, %rdi
+	movq	%rax, %rsi
 	callq	_string_concat
-	movq	%rax, -24(%rbp)
-	movq	-24(%rbp), %rdi
+	movq	%rax, %rdi
 	callq	_println_s
 	movsd	LCPI1_0(%rip), %xmm0            ## xmm0 = mem[0],zero
 	callq	_double_to_string
-	movq	%rax, -32(%rbp)
-	movq	-32(%rbp), %rdi
+	movq	%rax, %rdi
 	callq	_println_s
 	xorl	%eax, %eax
-	addq	$32, %rsp
+	addq	$8, %rsp
+	popq	%rbx
 	popq	%rbp
 	retq
 	.cfi_endproc

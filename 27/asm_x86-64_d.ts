@@ -262,9 +262,9 @@ class Oprand{
         else if (this.kind == OprandKind.immediate){
             return "$"+this.value;
         }
-        else if (this.kind == OprandKind.returnSlot){
-                return "returnSlot";
-        }
+        // else if (this.kind == OprandKind.returnSlot){
+        //         return "returnSlot";
+        // }
         // else if (this.kind == OprandKind.varIndex){
         //     return "var"+this.value;
         // }
@@ -276,14 +276,14 @@ class Oprand{
 }
 
 class VarOprand extends Oprand{
-    regKind:RegisterKind;
-    constructor(index:number, regKind:RegisterKind){
+    dataType:CpuDataType;
+    constructor(index:number, dataType:CpuDataType){
         super(OprandKind.varIndex, index);
-        this.regKind = regKind;
+        this.dataType = dataType;
     }
 
     toString():string{
-        return "var"+this.value+"("+ RegisterKind[this.regKind] +")";
+        return "var"+this.value+"("+ CpuDataType[this.dataType] +")";
     }
 }
 
@@ -301,13 +301,26 @@ class FunctionOprand extends Oprand{
     }
 }
 
+//条件语句产生的Oprand，里面记录了比较操作符的类型，以及数据类型（用于确定具体的跳转指令）
+class CmpOprand extends Oprand{
+    dataType:CpuDataType;
+    constructor(op:Op, dataType:CpuDataType){
+        super(OprandKind.cmp, op);
+        this.dataType = dataType;
+    }
+
+    toString():string{
+        return "var"+this.value+"("+ CpuDataType[this.dataType] +")";
+    }
+}
+
 /**
  * 操作数的类型
  */
 enum OprandKind{
     //抽象度较高的操作数
     varIndex,       //变量下标
-    returnSlot,     //用于存放返回值的位置（通常是一个寄存器）
+    // returnSlot,     //用于存放返回值的位置（通常是一个寄存器）
     bb,             //跳转指令指向的基本块
     function,       //函数调用
     stringConst,    //字符串常量
@@ -321,7 +334,7 @@ enum OprandKind{
 
     //cmp指令的结果，是设置寄存器的标志位
     //后面可以根据flag和比较操作符的类型，来确定后续要生成的代码
-    flag,
+    cmp,
 }
 
 /**
@@ -390,7 +403,8 @@ class AsmModule{
         let str = "";
         let funIndex = 0;
         for (let fun of this.fun2Code.keys()){
-            str += this.doubleLiteralToString(fun, funIndex);
+            //浮点数字面量是以函数为单位的
+            str += this.doubleLiteralToSection(fun, funIndex);
 
             str += "\t.section	__TEXT,__text,regular,pure_instructions\n";  //伪指令：一个文本的section
             let funName = "_"+fun.name;
@@ -406,10 +420,14 @@ class AsmModule{
 
             funIndex++;
         }
+
+        //字符串字面量是以模块为单位的
+        str += this.stringLiteralToSection();
+
         return str;
     }
 
-    doubleLiteralToString(fun:FunctionSymbol, funIndex:number):string{
+    doubleLiteralToSection(fun:FunctionSymbol, funIndex:number):string{
         let doubleLiterals = this.doubleLiteralMap.get(fun) as number[];
 
         let str = "";
@@ -424,6 +442,22 @@ class AsmModule{
             }
 
             str += "\n";
+        }
+
+        return str;
+    }
+
+    stringLiteralToSection():string{
+        let str = "";
+        
+        if (this.stringConsts.length>0){
+            str += "\t.section	__TEXT,__cstring,cstring_literals\n";
+            for (let i = 0; i< this.stringConsts.length; i++){
+                let literal = this.stringConsts[i];
+                let label = genStringConstLabel(i);
+                str += label+":\n";
+                str += "\t.asciz\t\"" + literal + "\"\n";
+            }
         }
 
         return str;
@@ -472,7 +506,7 @@ class AsmGenerator extends AstVisitor{
     private asmModule:AsmModule|null = null;
 
     //用来存放返回值的位置
-    private returnSlot:Oprand = new Oprand(OprandKind.returnSlot, -1);
+    // private returnSlot:Oprand = new Oprand(OprandKind.returnSlot, -1);
 
     //一些状态变量
     private s = new TempStates();
@@ -483,10 +517,10 @@ class AsmGenerator extends AstVisitor{
     /**
      * 分配一个临时变量的下标。尽量复用已经死掉的临时变量
      */
-    private allocateTempVar(kind:RegisterKind):Oprand{
+    private allocateTempVar(dataType:CpuDataType):Oprand{
         let varIndex = this.s.nextTempVarIndex++;
         // let oprand = new Oprand(OprandKind.varIndex, varIndex);
-        let oprand = new VarOprand(varIndex, kind);
+        let oprand = new VarOprand(varIndex, dataType);
         //这里要添加一个变量声明
         this.getCurrentBB().insts.push(new Inst_1(OpCode.declVar,oprand));
         return oprand;
@@ -507,9 +541,10 @@ class AsmGenerator extends AstVisitor{
      * @param src 
      * @param dest 
      */
-    private movIfNotSame(src:Oprand, dest:Oprand){
+    private movIfNotSame(dataType: CpuDataType, src:Oprand, dest:Oprand){
         if (!src.isSame(dest)){
-            this.getCurrentBB().insts.push(new Inst_2(OpCode.movsd,src,dest));
+            let opCode = Util.movOp(dataType);
+            this.getCurrentBB().insts.push(new Inst_2(opCode,src,dest));
         }
     }
 
@@ -541,23 +576,6 @@ class AsmGenerator extends AstVisitor{
 
         this.handleFunction(prog.sym as FunctionSymbol, prog);
 
-        // //计算当前函数是不是叶子函数
-        // //先设置成叶子变量。如果遇到函数调用，则设置为false。
-        // this.asmModule?.isLeafFunction.set(this.s.functionSym as FunctionSymbol, true);
-
-        // //创建新的基本块
-        // this.newBlock();
-
-        // //遍历AST
-        // this.visitBlock(prog); 
-
-        // //保存成果
-        // this.asmModule.fun2Code.set(this.s.functionSym, this.s.bbs);
-        // this.asmModule.numTotalVars.set(this.s.functionSym, this.s.nextTempVarIndex);
-        // this.asmModule.doubleLiteralMap.set(this.s.functionSym, this.s.doubleLiterals);
-
-        // //重新设置状态变量
-        // this.s = new TempStates();
         this.tailAnalysisResult = null;
 
         return this.asmModule;
@@ -604,7 +622,8 @@ class AsmGenerator extends AstVisitor{
         if (rtnStmt.exp!=null){
             let ret = this.visit(rtnStmt.exp) as Oprand;
             //把返回值赋给相应的寄存器
-            this.movIfNotSame(ret,this.returnSlot);
+            let dataType = getCpuDataType(rtnStmt.exp.theType as Type);
+            this.movIfNotSame(dataType, ret, Util.returnReg(dataType));
 
             //分叉出一个额外的尾声块。
             if (this.tailAnalysisResult!= null){
@@ -639,7 +658,7 @@ class AsmGenerator extends AstVisitor{
         let bbFollowing = this.newBlock();
 
         //为bbCondition添加跳转语句
-        let op = this.getJumpOpCode(compOprand);
+        let op = this.getJumpOpCode(compOprand as CmpOprand);  //todo: 处理if条件不是比较表达式的情况
         let instConditionJump:Inst_1;
         if (bbElseBlock !=null){
             //跳转到else块
@@ -662,23 +681,23 @@ class AsmGenerator extends AstVisitor{
      * 根据条件表达式的操作符，确定该采用的跳转指令。用于if语句和for循环等中。
      * @param compOprand 
      */
-    private getJumpOpCode(compOprand:Oprand):OpCode{
+    private getJumpOpCode(compOprand:CmpOprand):OpCode{
         let op:OpCode = OpCode.jmp;
         if (compOprand.value == Op.G){
             // op = OpCode.jg;
-            op = OpCode.ja;
+            op = Util.jgOp(compOprand.dataType);
         }
         else if (compOprand.value == Op.GE){
             // op = OpCode.jge;
-            op = OpCode.jae;
+            op = Util.jgeOp(compOprand.dataType);
         }
         else if (compOprand.value == Op.L){
             // op = OpCode.jl;
-            op = OpCode.jb;
+            op = Util.jlOp(compOprand.dataType);
         }
         else if (compOprand.value == Op.LE){
             // op = OpCode.jle;
-            op = OpCode.jbe;
+            op = Util.jleOp(compOprand.dataType);
         }
         else if (compOprand.value == Op.EQ){
             op = OpCode.je;
@@ -719,7 +738,7 @@ class AsmGenerator extends AstVisitor{
 
         //为bbCondition添加跳转语句
         if(compOprand != null){  //如果没有循环条件，就会直接落到循环体中
-            let op = this.getJumpOpCode(compOprand);
+            let op = this.getJumpOpCode(compOprand as CmpOprand);
             let instConditionJump= new Inst_1(op,new Oprand(OprandKind.bb, bbFollowing));
             bbCondition.insts.push(instConditionJump);
         }
@@ -744,13 +763,14 @@ class AsmGenerator extends AstVisitor{
             }
             let varIndex = this.s.functionSym.vars.indexOf(variableDecl.sym as VarSymbol);
             // let left = new Oprand(OprandKind.varIndex,varIndex);
-            let left = new VarOprand(varIndex, getRegisterKind(variableDecl.theType));
+            let dataType = getCpuDataType(variableDecl.theType);
+            let left = new VarOprand(varIndex, dataType);
 
             //插入一条抽象指令，代表这里声明了一个变量
             this.getCurrentBB().insts.push(new Inst_1(OpCode.declVar,left));
 
             //赋值
-            if (right) this.movIfNotSame(right, left);
+            if (right) this.movIfNotSame(dataType, right, left);
 
             return left;
         }
@@ -777,10 +797,12 @@ class AsmGenerator extends AstVisitor{
         //计算出一个目标操作数
         let dest: Oprand = left;
 
+        let dataType = getCpuDataType(bi.theType as Type);
+
         if (bi.op == Op.Plus || bi.op == Op.Minus || bi.op == Op.Multiply || bi.op == Op.Divide){
             if (!this.isTempVar(dest)){
-                dest = this.allocateTempVar(getRegisterKind(bi.theType as Type));
-                insts.push(new Inst_2(OpCode.movsd, left, dest));
+                dest = this.allocateTempVar(getCpuDataType(bi.theType as Type));
+                insts.push(new Inst_2(Util.movOp(dataType), left, dest));
             }
         }
 
@@ -796,23 +818,23 @@ class AsmGenerator extends AstVisitor{
                 }
                 else{
                     // this.movIfNotSame(left,dest);
-                    insts.push(new Inst_2(OpCode.addsd,right, dest));
+                    insts.push(new Inst_2(Util.addOp(dataType),right, dest));
                 }
                 break;
             case Op.Minus: //'-'
                 // this.movIfNotSame(left,dest);
-                insts.push(new Inst_2(OpCode.subsd,right, dest));
+                insts.push(new Inst_2(Util.subOp(dataType),right, dest));
                 break;
             case Op.Multiply: //'*'
                 // this.movIfNotSame(left,dest);
-                insts.push(new Inst_2(OpCode.mulsd,right, dest));
+                insts.push(new Inst_2(Util.mulOp(dataType),right, dest));
                 break;
             case Op.Divide: //'/'
                 // this.movIfNotSame(left,dest);
-                insts.push(new Inst_2(OpCode.divsd,right, dest));
+                insts.push(new Inst_2(Util.divOp(dataType),right, dest));
                 break;
             case Op.Assign: //'='
-                this.movIfNotSame(right,dest);
+                this.movIfNotSame(dataType, right,dest);
                 break;
             case Op.G:    
             case Op.L:
@@ -820,8 +842,9 @@ class AsmGenerator extends AstVisitor{
             case Op.LE:
             case Op.EQ:      
             case Op.NE: 
-                insts.push(new Inst_2(OpCode.ucomisd, right, dest)); 
-                dest = new Oprand(OprandKind.flag, this.getOpsiteOp(bi.op));
+                insts.push(new Inst_2(Util.cmpOp(dataType), right, dest)); 
+                // dest = new Oprand(OprandKind.flag, this.getOpsiteOp(bi.op));
+                dest = new CmpOprand(this.getOpsiteOp(bi.op), dataType);
                 break;      
             default:
                 console.log("Unsupported OpCode in AsmGenerator.visitBinary: "+Op[bi.op]);
@@ -873,26 +896,28 @@ class AsmGenerator extends AstVisitor{
         //用作返回值的Oprand
         let result:Oprand = oprand;  
 
+        let dataType = getCpuDataType(u.theType as Type);
+
         //++和--
         if(u.op == Op.Inc || u.op == Op.Dec){
-            let tempVar = this.allocateTempVar(getRegisterKind(u.theType as Type));
-            insts.push(new Inst_2(OpCode.movsd, oprand, tempVar));
+            let tempVar = this.allocateTempVar(getCpuDataType(u.theType as Type));
+            insts.push(new Inst_2(Util.movOp(dataType), oprand, tempVar));
             if(u.isPrefix){  //前缀运算符
                 result = tempVar;
             }
             else{  //后缀运算符
                 //把当前操作数放入一个临时变量作为返回值
-                result = this.allocateTempVar(getRegisterKind(u.theType as Type));
-                insts.push(new Inst_2(OpCode.movsd, oprand, result));
+                result = this.allocateTempVar(getCpuDataType(u.theType as Type));
+                insts.push(new Inst_2(Util.movOp(dataType), oprand, result));
             }
             //做+1或-1的运算
-            let opCode = u.op == Op.Inc ? OpCode.addsd : OpCode.subsd;
+            let opCode = u.op == Op.Inc ? Util.addOp(dataType) : Util.subOp(dataType);
             
             //把常量1变成double字面量
             let literalOprand = this.getDoubleIndexOprand(1);
             // insts.push(new Inst_2(opCode, new Oprand(OprandKind.immediate,1), tempVar));
             insts.push(new Inst_2(opCode, literalOprand, tempVar));
-            insts.push(new Inst_2(OpCode.movsd, tempVar, oprand));
+            insts.push(new Inst_2(Util.movOp(dataType), tempVar, oprand));
         }
         //+
         else if (u.op == Op.Plus){
@@ -900,10 +925,10 @@ class AsmGenerator extends AstVisitor{
         }
         //-
         else if (u.op == Op.Minus){
-            let tempVar = this.allocateTempVar(getRegisterKind(u.theType as Type));
+            let tempVar = this.allocateTempVar(getCpuDataType(u.theType as Type));
             //用0减去当前值
-            insts.push(new Inst_2(OpCode.movsd, new Oprand(OprandKind.immediate,0), tempVar));
-            insts.push(new Inst_2(OpCode.subsd, oprand, tempVar));
+            insts.push(new Inst_2(Util.movOp(dataType), new Oprand(OprandKind.immediate,0), tempVar));
+            insts.push(new Inst_2(Util.subOp(dataType), oprand, tempVar));
             result = tempVar;
         }
 
@@ -918,7 +943,7 @@ class AsmGenerator extends AstVisitor{
     visitVariable(variable:Variable):any{
         if (this.s.functionSym !=null && variable.sym!=null){
             let varIndex = this.s.functionSym.vars.indexOf(variable.sym);
-            return new VarOprand(varIndex, getRegisterKind(variable.theType as Type));
+            return new VarOprand(varIndex, getCpuDataType(variable.theType as Type));
         }
     }
 
@@ -958,7 +983,7 @@ class AsmGenerator extends AstVisitor{
             }
 
             //新申请一个临时变量
-            let tempVar = this.allocateTempVar(getRegisterKind(stringLiteral.theType as Type));
+            let tempVar = this.allocateTempVar(getCpuDataType(stringLiteral.theType as Type));
 
             //用leaq指令把字符串字面量加载到一个变量（虚拟寄存器）
             let inst = new Inst_2(OpCode.leaq, new Oprand(OprandKind.stringConst, strIndex), tempVar);
@@ -969,7 +994,7 @@ class AsmGenerator extends AstVisitor{
             args.push(tempVar);
 
             //调用内置函数，返回值是PlayString对象的地址
-            return this.callIntrinsics("string_create_by_str", args);
+            return this.callIntrinsics("string_create_by_cstr", args);
         }
     }
 
@@ -1046,7 +1071,7 @@ class AsmGenerator extends AstVisitor{
             return this.postFunctionCall(insts, functionType);
         }
         else{
-            return this.returnSlot;
+            return Util.returnReg(getCpuDataType(functionCall.theType as Type));
         }
     }
 
@@ -1055,8 +1080,9 @@ class AsmGenerator extends AstVisitor{
         //把结果放到一个新的临时变量里
         let dest:Oprand|undefined = undefined; 
         if(functionType.returnType != SysTypes.Void){ //函数有返回值时
-            dest = this.allocateTempVar(getRegisterKind(functionType.returnType));
-            insts.push(new Inst_2(OpCode.movsd, this.returnSlot, dest));
+            let dataType = getCpuDataType(functionType.returnType)
+            dest = this.allocateTempVar(dataType);
+            insts.push(new Inst_2(Util.movOp(dataType), Util.returnReg(dataType), dest));
         }
 
         //调用函数完毕以后，要重新装载被Spilled的变量
@@ -1071,12 +1097,17 @@ class AsmGenerator extends AstVisitor{
 
 ///////////////////////////////////////////////////////////////////////////
 //Lower
+
+//CPU原生支持的数据类型。
+//不同的数据类型，使用不同的指令和寄存器。
+enum CpuDataType{int32, int64, double};
+
 class Register extends Oprand{
-    bits:32|64|128 = 32;  //寄存器的位数
+    dataType:CpuDataType = CpuDataType.int32;  //寄存器的位数
     
-    private constructor(registerName:string, bits:32|64|128=32){
+    private constructor(registerName:string, dataType:CpuDataType=CpuDataType.int32){
         super(OprandKind.register,registerName);
-        this.bits = bits;
+        this.dataType = dataType;
     }
 
     //可供分配的寄存器的数量
@@ -1169,30 +1200,30 @@ class Register extends Oprand{
 
     //64位寄存器
     //参数用的寄存器，当然也要由caller保护
-    static rdi = new Register("rdi",64);
-    static rsi = new Register("rsi",64);
-    static rdx = new Register("rdx",64);
-    static rcx = new Register("rcx",64);
-    static r8 = new Register("r8",64);
-    static r9 = new Register("r9",64);
+    static rdi = new Register("rdi",CpuDataType.int64);
+    static rsi = new Register("rsi",CpuDataType.int64);
+    static rdx = new Register("rdx",CpuDataType.int64);
+    static rcx = new Register("rcx",CpuDataType.int64);
+    static r8 = new Register("r8",CpuDataType.int64);
+    static r9 = new Register("r9",CpuDataType.int64);
 
     //通用寄存器:caller（调用者）负责保护
-    static r10 = new Register("r10",64);
-    static r11 = new Register("r11",64);
+    static r10 = new Register("r10",CpuDataType.int64);
+    static r11 = new Register("r11",CpuDataType.int64);
 
     //返回值，也由Caller保护
-    static rax = new Register("rax",64);
+    static rax = new Register("rax",CpuDataType.int64);
 
     //通用寄存器:callee（调用者）负责保护
-    static rbx = new Register("rbx",64);
-    static r12 = new Register("r12",64);
-    static r13 = new Register("r13",64);
-    static r14 = new Register("r14",64);
-    static r15 = new Register("r15",64);
+    static rbx = new Register("rbx",CpuDataType.int64);
+    static r12 = new Register("r12",CpuDataType.int64);
+    static r13 = new Register("r13",CpuDataType.int64);
+    static r14 = new Register("r14",CpuDataType.int64);
+    static r15 = new Register("r15",CpuDataType.int64);
 
     //栈顶和栈底
-    static rsp = new Register("rsp",64);
-    static rbp = new Register("rbp",64);
+    static rsp = new Register("rsp",CpuDataType.int64);
+    static rbp = new Register("rbp",CpuDataType.int64);
 
     //64位的可供分配的寄存器
     static registers64:Register[] = [
@@ -1249,22 +1280,22 @@ class Register extends Oprand{
     // ];
   
     //xmm寄存器
-    static xmm0 = new Register("xmm0",128);
-    static xmm1 = new Register("xmm1",128);
-    static xmm2 = new Register("xmm2",128);
-    static xmm3 = new Register("xmm3",128);
-    static xmm4 = new Register("xmm4",128);
-    static xmm5 = new Register("xmm5",128);
-    static xmm6 = new Register("xmm6",128);
-    static xmm7 = new Register("xmm7",128);
-    static xmm8 = new Register("xmm8",128);
-    static xmm9 = new Register("xmm9",128);
-    static xmm10 = new Register("xmm10",128);
-    static xmm11 = new Register("xmm11",128);
-    static xmm12 = new Register("xmm12",128);
-    static xmm13 = new Register("xmm13",128);
-    static xmm14 = new Register("xmm14",128);
-    static xmm15 = new Register("xmm15",128);
+    static xmm0 = new Register("xmm0",CpuDataType.double);
+    static xmm1 = new Register("xmm1",CpuDataType.double);
+    static xmm2 = new Register("xmm2",CpuDataType.double);
+    static xmm3 = new Register("xmm3",CpuDataType.double);
+    static xmm4 = new Register("xmm4",CpuDataType.double);
+    static xmm5 = new Register("xmm5",CpuDataType.double);
+    static xmm6 = new Register("xmm6",CpuDataType.double);
+    static xmm7 = new Register("xmm7",CpuDataType.double);
+    static xmm8 = new Register("xmm8",CpuDataType.double);
+    static xmm9 = new Register("xmm9",CpuDataType.double);
+    static xmm10 = new Register("xmm10",CpuDataType.double);
+    static xmm11 = new Register("xmm11",CpuDataType.double);
+    static xmm12 = new Register("xmm12",CpuDataType.double);
+    static xmm13 = new Register("xmm13",CpuDataType.double);
+    static xmm14 = new Register("xmm14",CpuDataType.double);
+    static xmm15 = new Register("xmm15",CpuDataType.double);
 
     static xmmRegs:Register[] = [
         Register.xmm0,
@@ -1343,15 +1374,18 @@ class Register extends Oprand{
     ];
 
     //获取用于参数传递的寄存器数组
-    static getParamRegister(regKind:RegisterKind, index:number):Register|null{
+    static getParamRegister(dataType:CpuDataType, index:number):Register|null{
         let registers:Register[];
-        switch(regKind){
-            case RegisterKind.int32:
+        switch(dataType){
+            case CpuDataType.int32:
                 registers = Register.paramRegisters32;
-            case RegisterKind.int64:
+                // break;          //todo: 暂时不使用32位寄存器传参，以避免位数的冲突。
+            case CpuDataType.int64:
                 registers = Register.paramRegisters64;
-            case RegisterKind.xmm:
+                break;
+            case CpuDataType.double:
                 registers = Register.paramRegistersXmm;
+                break;
         }
 
         return index < registers.length ? registers[index] : null;
@@ -1361,9 +1395,6 @@ class Register extends Oprand{
         return "%"+this.value;
     }
 }
-
-//寄存器的类型。
-enum RegisterKind{int32, int64, xmm};
 
 /**
  * 内存寻址
@@ -1432,8 +1463,8 @@ class MemAddress extends Oprand{
     canUseRedZone = false;
 
     //预留的寄存器。
-    //主要用于在调用函数前，保护起那些马上就要用到的寄存器，不再分配给其他变量。
-    reservedRegisters:Register[] = [];
+    //主要用于在调用函数前，保护起那些马上就要用到的寄存器，不再分配给其他变量。也不会为了给其他变量腾地方而spill到内存。
+    regsUsedByFunctionCall:Register[] = [];
 
     //spill的register在内存中的位置。
     spillOffset:number = 0;
@@ -1547,18 +1578,40 @@ class MemAddress extends Oprand{
     }
 
     private lowerParams(){
+        let functionType = this.functionSym?.theType as FunctionType;
+        let usedIntRegisters = 0;  //使用掉的整数寄存器
+        let usedXmmRegisters = 0;  //使用掉的xmm寄存器
+        let numArgsOnStack = 0;   //栈上的参数的下标
         for (let i:number = 0; i< this.numParams;i++){
-            if (i < this.MaxXmmRegParams){
-                let reg = Register.paramRegisters32[i];
-                this.assignRegToVar(i, reg);
+            let dataType = getCpuDataType(functionType.paramTypes[i]);
+            
+            let regParam:Register|null = null;
+            if ((dataType == CpuDataType.int32 || dataType == CpuDataType.int64) && usedIntRegisters < this.MaxIntRegParams ){
+                regParam = Register.getParamRegister(dataType, usedIntRegisters);
+                usedIntRegisters++;
             }
-            else{
-                //从Caller的栈里访问参数
-                let offset = (i - this.MaxXmmRegParams)*8 + 16;  //+16是因为有一个callq压入的返回地址，一个pushq rbp又加了8个字节
-                let oprand = new MemAddress(Register.rbp,offset);   
-                this.loweredVars.set(i, oprand);
+            else if (regParam == CpuDataType.double && usedXmmRegisters < this.MaxXmmRegParams){
+                regParam = Register.getParamRegister(dataType, usedXmmRegisters);
+                usedXmmRegisters++;
             }
+
+            //通过寄存器传递的参数
+            if(regParam){
+                this.assignRegToVar(i, regParam);
+            }
+            //通过Caller栈桢传递的参数
+            else{  
+                //参数是倒着排的。
+                //比如，对于整数来说，栈顶是参数7，再往上，依次是参数8、参数9...
+                //在Callee中，会到Caller的栈桢中去读取参数值
+                let offset = numArgsOnStack*8 + 16;  //+16是因为有一个callq压入的返回地址，一个pushq rbp又加了8个字节
+                numArgsOnStack++;
+                let memParam = new MemAddress(Register.rbp,offset); 
+                this.loweredVars.set(i, memParam);
+            }
+
         }
+
     }
 
     /**
@@ -1575,7 +1628,7 @@ class MemAddress extends Oprand{
         this.spillOffset = 0;
         this.spilledVars2Address.clear();
         this.spilledVars2Reg.clear();
-        this.reservedRegisters = []; 
+        this.regsUsedByFunctionCall = []; 
         this.canUseRedZone = false;       
     }
 
@@ -1723,13 +1776,12 @@ class MemAddress extends Oprand{
             //两个操作数
             if (Inst_2.isInst_2(inst)){
                 let inst_2 = inst as Inst_2;
-                let oldKind1 = inst_2.oprand1.kind;
                 inst_2.comment = inst_2.toString();
                 inst_2.oprand1 = this.lowerOprand(liveVars, inst_2.oprand1, newInsts);
                 inst_2.oprand2 = this.lowerOprand(liveVars, inst_2.oprand2, newInsts);
 
                 //对mov再做一次优化
-                if (!(inst_2.op == OpCode.movsd && inst_2.oprand1 == inst_2.oprand2)){
+                if (!(Util.isMov(inst_2.op) && inst_2.oprand1 == inst_2.oprand2)){
                     newInsts.push(inst_2);
                 }
             }
@@ -1782,6 +1834,14 @@ class MemAddress extends Oprand{
     private lowerFunctionCall(inst_1:Inst_1, liveVars:number[], liveVarsAfterCall:number[], newInsts:Inst[]):number[]{
         let functionOprand = inst_1.oprand as FunctionOprand;
         let args = functionOprand.args;
+
+        //先把所有的参数Lower掉，这个顺序不能错
+        //其中，参数中可能也有嵌套的函数调用
+        let numArgs = args.length;
+        for (let j = 0; j < numArgs; j++){
+            args[j] = this.lowerOprand(liveVars, args[j], newInsts);
+        }
+
         let saveCallerProtectedRegs = (inst_1.op == OpCode.callq);
 
         //保存Caller负责保护的寄存器
@@ -1803,28 +1863,30 @@ class MemAddress extends Oprand{
 
         //把参数设置到寄存器
         //并且把需要覆盖的reg溢出
-        let numArgs = args.length;
         let usedIntRegisters = 0;  //使用掉的整数寄存器
         let usedXmmRegisters = 0;  //使用掉的xmm寄存器
         let numArgsOnStack = 0;
 
         let regsSpilled : Register[] = []; 
         for (let j = 0; j < numArgs; j++){
-            let source:Oprand = this.lowerOprand(liveVars, args[j], newInsts);
+            let dataType = getCpuDataType(functionOprand.functionType.paramTypes[j]);
 
-            let regKind = getRegisterKind(functionOprand.functionType.paramTypes[j]);
+            console.log("LowerFunctionCall, j="+j);
+            console.log(CpuDataType[dataType]);
             
             let regDest:Register|null = null;
-            if ((regKind == RegisterKind.int32 || regKind == RegisterKind.int64) && usedIntRegisters < this.MaxIntRegParams ){
-                regDest = Register.getParamRegister(regKind, usedIntRegisters);
+            if ((dataType == CpuDataType.int32 || dataType == CpuDataType.int64) && usedIntRegisters < this.MaxIntRegParams ){
+                regDest = Register.getParamRegister(dataType, usedIntRegisters);
                 usedIntRegisters++;
             }
-            else if (regDest == RegisterKind.xmm && usedXmmRegisters < this.MaxXmmRegParams){
-                regDest = Register.getParamRegister(regKind, usedXmmRegisters);
+            else if (regDest == CpuDataType.double && usedXmmRegisters < this.MaxXmmRegParams){
+                regDest = Register.getParamRegister(dataType, usedXmmRegisters);
                 usedXmmRegisters++;
             }
+
+            console.log(regDest);
             
-            let opCode = getMovOpcode(regKind);
+            let opCode = Util.movOp(dataType);
 
             //用寄存器传递的参数
             if(regDest){
@@ -1838,8 +1900,8 @@ class MemAddress extends Oprand{
                     }
                 }
 
-                if (regDest !== source){
-                    newInsts.push(new Inst_2(opCode, source, regDest)); 
+                if (regDest !== args[j]){
+                    newInsts.push(new Inst_2(opCode, args[j], regDest)); 
                 }
             }
             //超出寄存器容纳的参数，放到栈里
@@ -1847,10 +1909,9 @@ class MemAddress extends Oprand{
                 //参数是倒着排的。
                 //比如，对于整数来说，栈顶是参数7，再往上，依次是参数8、参数9...
                 //在Callee中，会到Caller的栈桢中去读取参数值
-                let oprand = this.lowerOprand(liveVars, args[j], newInsts, args[j].kind == OprandKind.varIndex);
                 let offset = numArgsOnStack*8;
                 numArgsOnStack++;
-                newInsts.push(new Inst_2(opCode, oprand, new MemAddress(Register.rsp, offset)));
+                newInsts.push(new Inst_2(opCode, args[j], new MemAddress(Register.rsp, offset)));
             }
         }
 
@@ -1912,7 +1973,7 @@ class MemAddress extends Oprand{
                 }
             }
             else{ 
-                let reg = this.getFreeRegister(oprand.regKind, liveVars);
+                let reg = this.getFreeRegister(oprand.dataType, liveVars);
                 if (reg == null){
                     reg = this.spillARegister(newInsts) as Register;
                 }
@@ -1922,13 +1983,13 @@ class MemAddress extends Oprand{
         if(oprand.kind == OprandKind.stringConst){
             let constIndex = oprand.value as number;
             oprand.kind = OprandKind.label;
-            oprand.value = genStringConstLabel(constIndex);
+            oprand.value = genStringConstLabel(constIndex)+"(%rip)";
         }
         //返回值
-        else if (oprand.kind == OprandKind.returnSlot){
-            //因为返回值总是代码的最后一行，所以破坏掉里面的值也没关系
-            newOprand = Register.xmm0;  
-        }
+        // else if (oprand.kind == OprandKind.returnSlot){
+        //     //因为返回值总是代码的最后一行，所以破坏掉里面的值也没关系
+        //     newOprand = Register.xmm0;  
+        // }
 
         // if (aa) 
         //     console.log(newOprand);
@@ -1956,7 +2017,8 @@ class MemAddress extends Oprand{
             this.spilledVars2Address.set(varIndex, address);
             this.spilledVars2Reg.set(varIndex, reg);
         }
-        newInsts.push(new Inst_2(OpCode.movsd, reg, address, "spill\tvar"+varIndex));
+        let opCode = Util.movOp(reg.dataType);
+        newInsts.push(new Inst_2(opCode, reg, address, "spill\tvar"+varIndex));
         this.loweredVars.set(varIndex, address);
         return address;
     }
@@ -1975,7 +2037,8 @@ class MemAddress extends Oprand{
                 }
             }
             this.assignRegToVar(varIndex, reg);
-            newInsts.push(new Inst_2(OpCode.movsd, address, reg, "reload\tvar" + varIndex));
+            let opCode = Util.movOp(reg.dataType);
+            newInsts.push(new Inst_2(opCode, address, reg, "reload\tvar" + varIndex));
             return reg;
         }
         return null;
@@ -1987,7 +2050,8 @@ class MemAddress extends Oprand{
     private spillARegister(newInsts:Inst[]):Register|null{
           for (let varIndex of this.loweredVars.keys()){
             let oprand = this.loweredVars.get(varIndex) as Oprand;
-            if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)!=-1){
+            // if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)!=-1){
+            if (oprand.kind == OprandKind.register){
                 this.spillVar(varIndex, oprand as Register, newInsts);
             }
         }
@@ -2009,7 +2073,7 @@ class MemAddress extends Oprand{
      * 获取一个空余的寄存器
      * @param liveVars 
      */
-    private getFreeRegister(regKind:RegisterKind,liveVars:number[]):Register|null{
+    private getFreeRegister(dataType:CpuDataType,liveVars:number[]):Register|null{
         let result:Register|null = null;
 
         //1.从空余的寄存器中寻找一个。
@@ -2026,20 +2090,21 @@ class MemAddress extends Oprand{
         
         //确定寄存器池
         let regs:Register[];
-        switch(regKind){
-            case RegisterKind.int32:
+        switch(dataType){
+            case CpuDataType.int32:
                 regs = Register.registers32;
                 break;
-            case RegisterKind.int64:
+            case CpuDataType.int64:
                 regs = Register.registers64;
                 break;
-            case RegisterKind.xmm:
+            case CpuDataType.double:
                 regs = Register.xmmRegs;
                 break;
         }    
 
         for (let reg of regs){
-            if (allocatedRegisters.indexOf(reg) == -1 && this.reservedRegisters.indexOf(reg)==-1){
+            // if (allocatedRegisters.indexOf(reg) == -1 && this.reservedRegisters.indexOf(reg)==-1){
+            if (allocatedRegisters.indexOf(reg) == -1){
                 result = reg;
                 break;
             }
@@ -2063,12 +2128,11 @@ class MemAddress extends Oprand{
     }
 
     private saveCalleeProtectedRegs(newInsts:Inst[]){
-        //暂时不需要处理
-        // for (let i = 0; i< this.usedCalleeProtectedRegs.length; i++){
-        //     let regIndex = Register.calleeProtected32.indexOf(this.usedCalleeProtectedRegs[i]);
-        //     let reg64 = Register.calleeProtected64[regIndex];
-        //     newInsts.push(new Inst_1(OpCode.pushq, reg64));
-        // }
+        for (let i = 0; i< this.usedCalleeProtectedRegs.length; i++){
+            let regIndex = Register.calleeProtected32.indexOf(this.usedCalleeProtectedRegs[i]);
+            let reg64 = Register.calleeProtected64[regIndex];
+            newInsts.push(new Inst_1(OpCode.pushq, reg64));
+        }
     }
 
     private restoreCalleeProtectedRegs(newInsts:Inst[]){
@@ -2409,31 +2473,81 @@ function genStringConstLabel(index:number){
 }
 
 //根据数据类型确定寄存器类型
-function getRegisterKind(t:Type):RegisterKind{
-    let kind = RegisterKind.int32;
+function getCpuDataType(t:Type):CpuDataType{
+    let dataType = CpuDataType.int32;
     
     if (t == SysTypes.Number || t == SysTypes.Integer || t == SysTypes.Decimal){
-        kind = RegisterKind.xmm;
+        dataType = CpuDataType.double;
     }
     else if (t == SysTypes.String){
-        kind = RegisterKind.int64;
+        dataType = CpuDataType.int64;
     }
 
-    return kind;
+    return dataType;
 }
 
-function getMovOpcode(t:RegisterKind):OpCode{
-    let code:OpCode;
-    switch(t){
-        case RegisterKind.int32:
-            code = OpCode.movl;
-            break;
-        case RegisterKind.int64:
-            code = OpCode.movq;
-            break;
-        case RegisterKind.xmm:
-            code = OpCode.movsd;
-            break;
+class Util{
+    static adds:OpCode[] = [OpCode.addl, OpCode.addq, OpCode.addsd];
+    static subs:OpCode[] = [OpCode.subl, OpCode.subq, OpCode.subsd];
+    static muls:OpCode[] = [OpCode.mull, OpCode.mulq, OpCode.mulsd];
+    static divs:OpCode[] = [OpCode.divl, OpCode.divq, OpCode.divsd];
+    static movs:OpCode[] = [OpCode.movq, OpCode.movq, OpCode.movsd];  //todo 临时取消了movl
+    static cmps:OpCode[] = [OpCode.cmpl, OpCode.cmpq, OpCode.ucomisd];
+    static jgs:OpCode[] = [OpCode.jg, OpCode.jg, OpCode.ja];
+    static jges:OpCode[] = [OpCode.jge, OpCode.jge, OpCode.jae];
+    static jls:OpCode[] = [OpCode.jl, OpCode.jl, OpCode.jb];
+    static jles:OpCode[] = [OpCode.jle, OpCode.jle, OpCode.jbe];  
+
+    static retRegs:Register[] = [Register.eax, Register.rax, Register.xmm0];
+
+    static isMov(op:OpCode):boolean{
+        return Util.movs.indexOf(op) != -1;
     }
-    return code;
+    
+    static movOp(dataType:CpuDataType):OpCode{
+        return Util.movs[dataType];
+    }
+
+    static addOp(dataType:CpuDataType):OpCode{
+        return Util.adds[dataType];
+    }
+
+    static subOp(dataType:CpuDataType):OpCode{
+        return Util.subs[dataType];
+    }
+
+    static mulOp(dataType:CpuDataType):OpCode{
+        return Util.muls[dataType];
+    }
+
+    static divOp(dataType:CpuDataType):OpCode{
+        return Util.divs[dataType];
+    }
+
+    static cmpOp(dataType:CpuDataType):OpCode{
+        return Util.cmps[dataType];
+    }
+
+    static jgOp(dataType:CpuDataType):OpCode{
+        return Util.jgs[dataType];
+    }
+
+    static jgeOp(dataType:CpuDataType):OpCode{
+        return Util.jges[dataType];
+    }
+
+    static jlOp(dataType:CpuDataType):OpCode{
+        return Util.jls[dataType];
+    }
+
+    static jleOp(dataType:CpuDataType):OpCode{
+        return Util.jles[dataType];
+    }
+
+    //根据不同的返回值类型，确定不通过的寄存器
+    static returnReg(dataType:CpuDataType):Register{
+        return Util.retRegs[dataType];
+    }
 }
+
+

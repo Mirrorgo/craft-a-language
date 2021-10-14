@@ -8,7 +8,7 @@
  *
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SymbolDumper = exports.SymbolVisitor = exports.intrinsics = exports.built_ins = exports.FUN_integer_to_string = exports.FUN_tick = exports.FUN_println = exports.SymKind = exports.VarSymbol = exports.FunctionSymbol = exports.Symbol = void 0;
+exports.SymbolDumper = exports.SymbolVisitor = exports.intrinsics = exports.built_ins = exports.FUN_integer_to_string = exports.FUN_tick_d = exports.FUN_tick = exports.FUN_println_d = exports.FUN_println_s = exports.FUN_println = exports.SymKind = exports.VarSymbol = exports.FunctionSymbol = exports.Symbol = void 0;
 const types_1 = require("./types");
 /////////////////////////////////////////////////////////////////////////
 // 符号表
@@ -95,18 +95,24 @@ var SymKind;
 /////////////////////////////////////////////////////////////////////////
 //一些系统内置的符号
 exports.FUN_println = new FunctionSymbol("println", new types_1.FunctionType(types_1.SysTypes.Void, [types_1.SysTypes.Any]), [new VarSymbol("a", types_1.SysTypes.String)]);
+exports.FUN_println_s = new FunctionSymbol("println_s", new types_1.FunctionType(types_1.SysTypes.Void, [types_1.SysTypes.String]), [new VarSymbol("a", types_1.SysTypes.String)]);
+exports.FUN_println_d = new FunctionSymbol("println_d", new types_1.FunctionType(types_1.SysTypes.Void, [types_1.SysTypes.Number]), [new VarSymbol("a", types_1.SysTypes.String)]);
 exports.FUN_tick = new FunctionSymbol("tick", new types_1.FunctionType(types_1.SysTypes.Integer, []), []);
+exports.FUN_tick_d = new FunctionSymbol("tick_d", new types_1.FunctionType(types_1.SysTypes.Number, []), []);
 exports.FUN_integer_to_string = new FunctionSymbol("integer_to_string", new types_1.FunctionType(types_1.SysTypes.String, [types_1.SysTypes.Integer]), [new VarSymbol("a", types_1.SysTypes.Integer)]);
 exports.built_ins = new Map([
     ["println", exports.FUN_println],
+    ["println_s", exports.FUN_println_s],
+    ["println_d", exports.FUN_println_d],
     ["tick", exports.FUN_tick],
+    ["tick_d", exports.FUN_tick_d],
     ["integer_to_string", exports.FUN_integer_to_string],
     // ["string_concat", FUN_string_concat],
 ]);
 let FUN_string_create_by_str = new FunctionSymbol("string_create_by_str", new types_1.FunctionType(types_1.SysTypes.String, [types_1.SysTypes.String]), [new VarSymbol("a", types_1.SysTypes.String)]);
 let FUN_string_concat = new FunctionSymbol("string_concat", new types_1.FunctionType(types_1.SysTypes.String, [types_1.SysTypes.String, types_1.SysTypes.String]), [new VarSymbol("str1", types_1.SysTypes.String), new VarSymbol("str2", types_1.SysTypes.String)]);
 exports.intrinsics = new Map([
-    ["string_create_by_str", FUN_string_create_by_str],
+    ["string_create_by_cstr", FUN_string_create_by_str],
     ["string_concat", FUN_string_concat],
 ]);
 ///////////////////////////////////////////////////////////////////////

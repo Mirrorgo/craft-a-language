@@ -14,27 +14,26 @@ _fibonacci:
     movq	%rsp, %rbp
     subq	$16, %rsp
 ## bb.1
-    ucomisd	LCPI0_0(%rip), %xmm0		#  ucomisd	doubleIndex(0), var0
-    ja	LBB0_3
+    cmpl	LCPI0_0(%rip), 16(%rbp)		#  cmpl	doubleIndex(0), var0(double)
+    jg	LBB0_3
 ## bb.2
+    movsd	16(%rbp), %xmm0		#  movsd	var0(double), %xmm0
     jmp	LBB0_4
 LBB0_3:
-    movsd	%xmm0, %xmm1				#  movsd	var0, var1
-    subsd	LCPI0_0(%rip), %xmm1		#  subsd	doubleIndex(0), var1
-    movsd	%xmm0, -8(%rbp)		#  spill	var0
-    movsd	%xmm1, %xmm0
+    movsd	16(%rbp), %xmm0		#  movsd	var0(double), var1(double)
+    subsd	LCPI0_0(%rip), %xmm0		#  subsd	doubleIndex(0), var1(double)
+    movsd	%xmm0, (%rsp)
     callq	_fibonacci
-    movsd	%xmm0, %xmm2				#  movsd	returnSlot, var2
-    movsd	-8(%rbp), %xmm0		#  reload	var0
-    movsd	%xmm0, %xmm3				#  movsd	var0, var3
-    subsd	LCPI0_1(%rip), %xmm3		#  subsd	doubleIndex(1), var3
-    movsd	%xmm3, %xmm0
-    movsd	%xmm2, -16(%rbp)		#  spill	var2
+    movsd	%xmm0, %xmm1				#  movsd	%xmm0, var2(double)
+    movsd	16(%rbp), %xmm2		#  movsd	var0(double), var3(double)
+    subsd	LCPI0_1(%rip), %xmm2		#  subsd	doubleIndex(1), var3(double)
+    movsd	%xmm2, (%rsp)
+    movsd	%xmm1, -8(%rbp)		#  spill	var2
     callq	_fibonacci
-    movsd	%xmm0, %xmm4				#  movsd	returnSlot, var4
-    movsd	-16(%rbp), %xmm2		#  reload	var2
-    addsd	%xmm4, %xmm2				#  addsd	var4, var2
-    movsd	%xmm2, %xmm0				#  movsd	var2, returnSlot
+    movsd	%xmm0, %xmm3				#  movsd	%xmm0, var4(double)
+    movsd	-8(%rbp), %xmm1		#  reload	var2
+    addsd	%xmm3, %xmm1				#  addsd	var4(double), var2(double)
+    movsd	%xmm1, %xmm0				#  movsd	var2(double), %xmm0
 LBB0_4:
     addq	$16, %rsp
     popq	%rbp
@@ -59,27 +58,29 @@ _main:
     movq	%rsp, %rbp
     subq	$16, %rsp
 ## bb.1
-    movsd	LCPI1_0(%rip), %xmm0		#  movsd	doubleIndex(0), var0
+    movsd	LCPI1_0(%rip), %xmm0		#  movsd	doubleIndex(0), var0(double)
 LBB1_2:
-    ucomisd	LCPI1_1(%rip), %xmm0		#  ucomisd	doubleIndex(1), var0
-    ja	LBB1_4
+    cmpl	LCPI1_1(%rip), %xmm0		#  cmpl	doubleIndex(1), var0(double)
+    jg	LBB1_4
 ## bb.3
+    movl	%xmm0, %rdi
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     callq	_println_d
     movsd	-8(%rbp), %xmm0		#  reload	var0
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     callq	_tick_d
-    movsd	%xmm0, %xmm1				#  movsd	returnSlot, var3
+    movsd	%xmm0, %xmm1				#  movsd	%xmm0, var3(double)
     movsd	-8(%rbp), %xmm0		#  reload	var0
-    movsd	%xmm1, %xmm2				#  movsd	var3, var1
+    movsd	%xmm1, %xmm2				#  movsd	var3(double), var1(double)
+    movsd	%xmm0, (%rsp)
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     movsd	%xmm2, -16(%rbp)		#  spill	var1
     callq	_fibonacci
-    movsd	%xmm0, %xmm3				#  movsd	returnSlot, var4
+    movsd	%xmm0, %xmm3				#  movsd	%xmm0, var4(double)
     movsd	-8(%rbp), %xmm0		#  reload	var0
     movsd	-16(%rbp), %xmm2		#  reload	var1
+    movl	%xmm3, %rdi
     movsd	%xmm0, -8(%rbp)		#  spill	var0
-    movsd	%xmm3, %xmm0
     movsd	%xmm2, -16(%rbp)		#  spill	var1
     callq	_println_d
     movsd	-8(%rbp), %xmm0		#  reload	var0
@@ -87,20 +88,20 @@ LBB1_2:
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     movsd	%xmm2, -16(%rbp)		#  spill	var1
     callq	_tick_d
-    movsd	%xmm0, %xmm4				#  movsd	returnSlot, var5
+    movsd	%xmm0, %xmm4				#  movsd	%xmm0, var5(double)
     movsd	-8(%rbp), %xmm0		#  reload	var0
     movsd	-16(%rbp), %xmm2		#  reload	var1
-    movsd	%xmm4, %xmm5				#  movsd	var5, var2
-    movsd	%xmm5, %xmm6				#  movsd	var2, var6
-    subsd	%xmm2, %xmm6				#  subsd	var1, var6
+    movsd	%xmm4, %xmm5				#  movsd	var5(double), var2(double)
+    movsd	%xmm5, %xmm6				#  movsd	var2(double), var6(double)
+    subsd	%xmm2, %xmm6				#  subsd	var1(double), var6(double)
+    movl	%xmm6, %rdi
     movsd	%xmm0, -8(%rbp)		#  spill	var0
-    movsd	%xmm6, %xmm0
     callq	_println_d
     movsd	-8(%rbp), %xmm0		#  reload	var0
-    movsd	%xmm0, %xmm7				#  movsd	var0, var7
-    movsd	%xmm0, %xmm8				#  movsd	var0, var8
-    addsd	LCPI1_2(%rip), %xmm7		#  addsd	doubleIndex(2), var7
-    movsd	%xmm7, %xmm0				#  movsd	var7, var0
+    movl	%xmm0, %r10d				#  movl	var0(double), var7(int32)
+    movl	%xmm0, %r11d				#  movl	var0(double), var8(int32)
+    addl	LCPI1_2(%rip), %r10d		#  addl	doubleIndex(2), var7(int32)
+    movl	%r10d, %xmm0				#  movl	var7(int32), var0(double)
     jmp	LBB1_2
 LBB1_4:
     addq	$16, %rsp
