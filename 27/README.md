@@ -6,8 +6,6 @@
 
 #### 本节的测试程序  
 
-***示例代码还有一点bug，会尽快修复...   
-
 1.example_str.ts  
 测试对字符串数据类型的支持。  
 构建命令：make example_str   
@@ -18,6 +16,7 @@
 构建命令：make str  
 运行：./str  
     
+影响example_str.ts的bug已修复，还要再检查一下之前的测试程序是否会break...  
 
 #### 环境配置注意事项
 

@@ -283,7 +283,7 @@ class VarOprand extends Oprand{
     }
 
     toString():string{
-        return "var"+this.value+"("+ CpuDataType[this.dataType] +")";
+        return "var"+this.value+":"+ CpuDataType[this.dataType];
     }
 }
 
@@ -297,7 +297,16 @@ class FunctionOprand extends Oprand{
     }
 
     toString():string{
-        return "_"+this.value;
+        let strArgs="";
+        for (let i = 0; i < this.args.length; i++){
+            if (i == 0) strArgs += "(";
+            strArgs += this.args[i].toString();
+            if (i < this.args.length-1) 
+                strArgs += ", ";
+            else 
+                strArgs += ")";
+        }
+        return "_"+this.value + strArgs;
     }
 }
 
@@ -521,7 +530,7 @@ class AsmGenerator extends AstVisitor{
         let varIndex = this.s.nextTempVarIndex++;
         // let oprand = new Oprand(OprandKind.varIndex, varIndex);
         let oprand = new VarOprand(varIndex, dataType);
-        //这里要添加一个变量声明
+        //临时变量也要添加一个变量声明，以便进行活跃性分析
         this.getCurrentBB().insts.push(new Inst_1(OpCode.declVar,oprand));
         return oprand;
     }
@@ -801,8 +810,9 @@ class AsmGenerator extends AstVisitor{
 
         if (bi.op == Op.Plus || bi.op == Op.Minus || bi.op == Op.Multiply || bi.op == Op.Divide){
             if (!this.isTempVar(dest)){
-                dest = this.allocateTempVar(getCpuDataType(bi.theType as Type));
-                insts.push(new Inst_2(Util.movOp(dataType), left, dest));
+                //todo 下面几行是不是已经过时了？这个是太关注物理层面了，由寄存器分配算法以后就不用了。
+                // dest = this.allocateTempVar(dataType);
+                // insts.push(new Inst_2(Util.movOp(dataType), left, dest));
             }
         }
 
@@ -814,7 +824,7 @@ class AsmGenerator extends AstVisitor{
                     let args:Oprand[] = [];
                     args.push(left);
                     args.push(right);
-                    this.callIntrinsics("string_concat", args);
+                    dest = this.callIntrinsics("string_concat", args);
                 }
                 else{
                     // this.movIfNotSame(left,dest);
@@ -1066,10 +1076,12 @@ class AsmGenerator extends AstVisitor{
  
         insts.push(new Inst_1(op, new FunctionOprand(funName, args,functionType)));
 
-        //对于尾递归和尾调用，不需要处理返回值，也不需要做变量的溢出和重新装载
+        //把返回值拷贝到一个临时变量，并返回这个临时变量
+        //并且要重新装载溢出的变量        
         if (!isTailCall && !isTailRecursive){
             return this.postFunctionCall(insts, functionType);
         }
+        //对于尾递归和尾调用，不需要处理返回值，也不需要做变量的溢出和重新装载
         else{
             return Util.returnReg(getCpuDataType(functionCall.theType as Type));
         }
@@ -1088,6 +1100,9 @@ class AsmGenerator extends AstVisitor{
         //调用函数完毕以后，要重新装载被Spilled的变量
         //这个动作要在获取返回值之后
         insts.push(new Inst_0(OpCode.reload));
+
+        console.log("postFunctionCall");
+        console.log(dest);
 
         return dest;
     }
@@ -1892,11 +1907,31 @@ class MemAddress extends Oprand{
             if(regDest){
                 //把参数用到的寄存器spill出去
                 if(saveCallerProtectedRegs){
-                    let index = regsToSpill.indexOf(regDest);
-                    if (index !=-1){
-                        let varIndex = varsToSpill[index];
+                    let argIndex = regsToSpill.indexOf(regDest);
+                    
+                    if (argIndex !=-1){
+                        let varIndex = varsToSpill[argIndex];
                         this.spillVar(varIndex,regDest,newInsts);
                         regsSpilled.push(regDest);
+                    }
+                    //看看这个寄存器是不是在args的后半截
+                    //这些参数寄存器之间可能会互相覆盖，因为它们没有参与数据流分析。
+                    //所以这里用一个简化的算法来避免这些冲突。
+                    else if (j<args.length-1){                            
+                        argIndex = args.indexOf(regDest,j+1);
+                        if (argIndex !=- 1 && regsSpilled.indexOf(regDest) == -1){
+                            //从寄存器倒查出varIndex
+                            let varIndex = this.getVarIndexOfReg(regDest) as number;
+                            if (regsToSpill.indexOf(regDest)==-1){
+                                regsToSpill.push(regDest);
+                                varsToSpill.push(varIndex);
+                            }
+                            this.spillVar(varIndex,regDest,newInsts);
+                            regsSpilled.push(regDest);
+
+                            //换成内存格式的Oprand
+                            args[argIndex] = this.loweredVars.get(varIndex) as Oprand;
+                        } 
                     }
                 }
 
@@ -1926,13 +1961,14 @@ class MemAddress extends Oprand{
 
         //对于尾递归和尾调用，不生成call指令。而是去Lower在return语句中，生成的连个特殊的jmp指令。
         if(inst_1.op != OpCode.tailRecursive && inst_1.op != OpCode.tailCall){
+            functionOprand.args = []; //把参数清空，方便打印。
             newInsts.push(inst_1);
         }
 
         // //清除预留的寄存器
         // this.reservedRegisters = [];
 
-        return varsToSpill;
+        return varsToSpill;  //??
     }
 
     /**
@@ -2067,6 +2103,15 @@ class MemAddress extends Oprand{
         }
         //更新loweredVars
         this.loweredVars.set(varIndex,reg);
+    }
+
+    //从寄存器倒着查出varIndex
+    private getVarIndexOfReg(reg:Register):number|undefined{
+        for(let varIndex of this.loweredVars.keys()){
+            if (this.loweredVars.get(varIndex) == reg){
+                return varIndex;
+            }
+        }
     }
 
     /**
