@@ -11,17 +11,13 @@ _foo:
     pushq	%rbp
     movq	%rsp, %rbp
 ## bb.1
-    ucomisd	%xmm1, %xmm0			#  ucomisd	var1, var0
-    jge	LBB0_3
+    ucomisd	%xmm1, %xmm0			#  ucomisd	var1:double, var0:double
+    jae	LBB0_3
 ## bb.2
-    movsd	%xmm0, %xmm2				#  movsd	var0, var2
-    addsd	LCPI0_0(%rip), %xmm2		#  addsd	doubleIndex(0), var2
-    movsd	%xmm2, %xmm0				#  movsd	var2, returnSlot
+    addsd	LCPI0_0(%rip), %xmm0		#  addsd	doubleIndex(0), var0:double
     jmp	LBB0_4
 LBB0_3:
-    movsd	%xmm0, %xmm3				#  movsd	var0, var3
-    subsd	LCPI0_0(%rip), %xmm3		#  subsd	doubleIndex(0), var3
-    movsd	%xmm3, %xmm0				#  movsd	var3, returnSlot
+    subsd	LCPI0_0(%rip), %xmm0		#  subsd	doubleIndex(0), var0:double
 LBB0_4:
     popq	%rbp
     retq
@@ -51,7 +47,7 @@ _main:
     movsd	LCPI1_2(%rip), %xmm0
     movsd	LCPI1_1(%rip), %xmm1
     callq	_foo
-    movsd	%xmm0, %xmm1				#  movsd	returnSlot, var1
+    movsd	%xmm0, %xmm1				#  movsd	%xmm0, var1:double
     movsd	%xmm1, %xmm0
     callq	_println_d
     popq	%rbp

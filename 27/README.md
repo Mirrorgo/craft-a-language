@@ -16,7 +16,7 @@
 构建命令：make str  
 运行：./str  
     
-影响example_str.ts的bug已修复，还要再检查一下之前的测试程序是否会break...  
+之前的测试程序现在也不会break。     
 
 #### 环境配置注意事项
 

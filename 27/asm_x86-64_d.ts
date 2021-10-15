@@ -1605,7 +1605,7 @@ class MemAddress extends Oprand{
                 regParam = Register.getParamRegister(dataType, usedIntRegisters);
                 usedIntRegisters++;
             }
-            else if (regParam == CpuDataType.double && usedXmmRegisters < this.MaxXmmRegParams){
+            else if (dataType == CpuDataType.double && usedXmmRegisters < this.MaxXmmRegParams){
                 regParam = Register.getParamRegister(dataType, usedXmmRegisters);
                 usedXmmRegisters++;
             }
@@ -1885,22 +1885,17 @@ class MemAddress extends Oprand{
         let regsSpilled : Register[] = []; 
         for (let j = 0; j < numArgs; j++){
             let dataType = getCpuDataType(functionOprand.functionType.paramTypes[j]);
-
-            console.log("LowerFunctionCall, j="+j);
-            console.log(CpuDataType[dataType]);
-            
+           
             let regDest:Register|null = null;
             if ((dataType == CpuDataType.int32 || dataType == CpuDataType.int64) && usedIntRegisters < this.MaxIntRegParams ){
                 regDest = Register.getParamRegister(dataType, usedIntRegisters);
                 usedIntRegisters++;
             }
-            else if (regDest == CpuDataType.double && usedXmmRegisters < this.MaxXmmRegParams){
+            else if (dataType == CpuDataType.double && usedXmmRegisters < this.MaxXmmRegParams){
                 regDest = Register.getParamRegister(dataType, usedXmmRegisters);
                 usedXmmRegisters++;
             }
-
-            console.log(regDest);
-            
+           
             let opCode = Util.movOp(dataType);
 
             //用寄存器传递的参数
@@ -2519,18 +2514,22 @@ function genStringConstLabel(index:number){
 
 //根据数据类型确定寄存器类型
 function getCpuDataType(t:Type):CpuDataType{
-    let dataType = CpuDataType.int32;
+    let dataType = CpuDataType.double;
     
-    if (t == SysTypes.Number || t == SysTypes.Integer || t == SysTypes.Decimal){
-        dataType = CpuDataType.double;
-    }
-    else if (t == SysTypes.String){
+    if (t == SysTypes.String){
         dataType = CpuDataType.int64;
     }
-
+    else if (t == SysTypes.Number || t == SysTypes.Integer || t == SysTypes.Decimal){
+        dataType = CpuDataType.double;
+    }
+    else{
+        console.log("Whoops! Unsupported dataType in getCpuDataType : " + t.toString());
+    }
+    
     return dataType;
 }
 
+//根据数据类型来获取正确的操作码和寄存器
 class Util{
     static adds:OpCode[] = [OpCode.addl, OpCode.addq, OpCode.addsd];
     static subs:OpCode[] = [OpCode.subl, OpCode.subq, OpCode.subsd];
