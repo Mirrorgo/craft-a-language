@@ -10,10 +10,10 @@
 
 
 //获取数组的数据部分的地址
-#define PTR_ARRAY_DATA(parr) (void *)(parr + sizeof(Object) + sizeof(size_t))
+#define PTR_ARRAY_DATA(parr) (void *)((size_t)parr + sizeof(Object) + sizeof(size_t))
 
 //获取数组中某个元素的地址
-#define PTR_ARRAY_ELEM(parr, index) (void *)(parr + sizeof(Object) + sizeof(size_t) + sizeof(double)*index)
+#define PTR_ARRAY_ELEM(parr, index) (void *)(((size_t)parr + sizeof(Object) + sizeof(size_t)) + sizeof(double)*index)
 
 /**
  * 目前数组对象的设计中，每个数组元素的长度是一样的，都是8字节（64位），可以用来保存对象引用或者是double值。

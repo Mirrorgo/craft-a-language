@@ -26,14 +26,31 @@ _sample_array_double:                   ## @sample_array_double
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
+	pushq	%rbx
+	pushq	%rax
+	.cfi_offset %rbx, -24
 	movl	$3, %edi
 	callq	_array_create_by_length
-	movabsq	$4617315517961601024, %rcx      ## imm = 0x4014000000000000
-	movq	%rcx, 576(%rax)
-	movabsq	$4622100592565682176, %rcx      ## imm = 0x4025000000000000
-	movq	%rcx, 768(%rax)
-	movabsq	$4622156887561024307, %rcx      ## imm = 0x4025333333333333
-	movq	%rcx, 960(%rax)
+	movq	%rax, %rbx
+	leaq	L_.str(%rip), %rdi
+	callq	_println_cs
+	movq	%rbx, %rdi
+	callq	_println_l
+	leaq	24(%rbx), %rdi
+	callq	_println_l
+	leaq	32(%rbx), %rdi
+	callq	_println_l
+	leaq	40(%rbx), %rdi
+	callq	_println_l
+	movabsq	$4617315517961601024, %rax      ## imm = 0x4014000000000000
+	movq	%rax, 24(%rbx)
+	movabsq	$4622100592565682176, %rax      ## imm = 0x4025000000000000
+	movq	%rax, 32(%rbx)
+	movabsq	$4622156887561024307, %rax      ## imm = 0x4025333333333333
+	movq	%rax, 40(%rbx)
+	movq	%rbx, %rax
+	addq	$8, %rsp
+	popq	%rbx
 	popq	%rbp
 	retq
 	.cfi_endproc
@@ -67,30 +84,28 @@ LBB2_1:
 	retq
 LBB2_8:
 	andq	$-4, %rcx
-	leaq	1152(%rdi), %rsi
+	leaq	48(%rdi), %rsi
 	xorpd	%xmm0, %xmm0
 	xorl	%edx, %edx
 	.p2align	4, 0x90
 LBB2_9:                                 ## =>This Inner Loop Header: Depth=1
-	addsd	-576(%rsi), %xmm0
-	addsd	-384(%rsi), %xmm0
-	addsd	-192(%rsi), %xmm0
+	addsd	-24(%rsi), %xmm0
+	addsd	-16(%rsi), %xmm0
+	addsd	-8(%rsi), %xmm0
 	addsd	(%rsi), %xmm0
 	addq	$4, %rdx
-	addq	$768, %rsi                      ## imm = 0x300
+	addq	$32, %rsi
 	cmpq	%rdx, %rcx
 	jne	LBB2_9
 LBB2_4:
 	testq	%rax, %rax
 	je	LBB2_7
 ## %bb.5:
-	leaq	(%rdx,%rdx,2), %rcx
-	shlq	$6, %rcx
-	leaq	576(%rcx,%rdi), %rcx
+	leaq	24(%rdi,%rdx,8), %rcx
 	.p2align	4, 0x90
 LBB2_6:                                 ## =>This Inner Loop Header: Depth=1
 	addsd	(%rcx), %xmm0
-	addq	$192, %rcx
+	addq	$8, %rcx
 	decq	%rax
 	jne	LBB2_6
 LBB2_7:
@@ -114,12 +129,20 @@ _sample_array_string:                   ## @sample_array_string
 	movl	$2, %edi
 	callq	_array_create_by_length
 	movq	%rax, %rbx
-	leaq	L_.str(%rip), %rdi
-	callq	_string_create_by_cstr
-	movq	%rax, 576(%rbx)
 	leaq	L_.str.1(%rip), %rdi
+	callq	_println_cs
+	movq	%rbx, %rdi
+	callq	_println_l
+	leaq	24(%rbx), %rdi
+	callq	_println_l
+	leaq	32(%rbx), %rdi
+	callq	_println_l
+	leaq	L_.str.2(%rip), %rdi
 	callq	_string_create_by_cstr
-	movq	%rax, 768(%rbx)
+	movq	%rax, 24(%rbx)
+	leaq	L_.str.3(%rip), %rdi
+	callq	_string_create_by_cstr
+	movq	%rax, 32(%rbx)
 	movq	%rbx, %rax
 	addq	$8, %rsp
 	popq	%rbx
@@ -149,11 +172,11 @@ _concat_array_string:                   ## @concat_array_string
 	je	LBB4_1
 ## %bb.2:
 	movq	%rdi, %r14
-	movq	576(%rdi), %rax
+	movq	24(%rdi), %rax
 	cmpq	$1, %rcx
 	je	LBB4_5
 ## %bb.3:
-	leaq	768(%r14), %r15
+	leaq	32(%r14), %r15
 	movl	$1, %ebx
 	.p2align	4, 0x90
 LBB4_4:                                 ## =>This Inner Loop Header: Depth=1
@@ -161,7 +184,7 @@ LBB4_4:                                 ## =>This Inner Loop Header: Depth=1
 	movq	%rax, %rdi
 	callq	_string_concat
 	incq	%rbx
-	addq	$192, %r15
+	addq	$8, %r15
 	cmpq	%rbx, 16(%r14)
 	ja	LBB4_4
 	jmp	LBB4_5
@@ -195,23 +218,42 @@ _sample_array_2d:                       ## @sample_array_2d
 	movq	%rax, %r14
 	movl	$3, %edi
 	callq	_array_create_by_length
-	movabsq	$4617315517961601024, %rcx      ## imm = 0x4014000000000000
-	movq	%rcx, 576(%rax)
-	movabsq	$4622100592565682176, %rcx      ## imm = 0x4025000000000000
-	movq	%rcx, 768(%rax)
-	movabsq	$4622156887561024307, %rcx      ## imm = 0x4025333333333333
-	movq	%rcx, 960(%rax)
-	movq	%rax, 576(%r14)
+	movq	%rax, %rbx
+	leaq	L_.str(%rip), %rdi
+	callq	_println_cs
+	movq	%rbx, %rdi
+	callq	_println_l
+	leaq	24(%rbx), %rdi
+	callq	_println_l
+	leaq	32(%rbx), %rdi
+	callq	_println_l
+	leaq	40(%rbx), %rdi
+	callq	_println_l
+	movabsq	$4617315517961601024, %rax      ## imm = 0x4014000000000000
+	movq	%rax, 24(%rbx)
+	movabsq	$4622100592565682176, %rax      ## imm = 0x4025000000000000
+	movq	%rax, 32(%rbx)
+	movabsq	$4622156887561024307, %rax      ## imm = 0x4025333333333333
+	movq	%rax, 40(%rbx)
+	movq	%rbx, 24(%r14)
 	movl	$2, %edi
 	callq	_array_create_by_length
 	movq	%rax, %rbx
-	leaq	L_.str(%rip), %rdi
-	callq	_string_create_by_cstr
-	movq	%rax, 576(%rbx)
 	leaq	L_.str.1(%rip), %rdi
+	callq	_println_cs
+	movq	%rbx, %rdi
+	callq	_println_l
+	leaq	24(%rbx), %rdi
+	callq	_println_l
+	leaq	32(%rbx), %rdi
+	callq	_println_l
+	leaq	L_.str.2(%rip), %rdi
 	callq	_string_create_by_cstr
-	movq	%rax, 768(%rbx)
-	movq	%rbx, 768(%r14)
+	movq	%rax, 24(%rbx)
+	leaq	L_.str.3(%rip), %rdi
+	callq	_string_create_by_cstr
+	movq	%rax, 32(%rbx)
+	movq	%rbx, 32(%r14)
 	movq	%r14, %rax
 	popq	%rbx
 	popq	%r14
@@ -236,29 +278,9 @@ _main:                                  ## @main
 	.cfi_offset %rbx, -40
 	.cfi_offset %r14, -32
 	.cfi_offset %r15, -24
-	movl	$2, %edi
-	callq	_array_create_by_length
-	movq	%rax, %r14
-	movl	$3, %edi
-	callq	_array_create_by_length
-	movabsq	$4617315517961601024, %rcx      ## imm = 0x4014000000000000
-	movq	%rcx, 576(%rax)
-	movabsq	$4622100592565682176, %rcx      ## imm = 0x4025000000000000
-	movq	%rcx, 768(%rax)
-	movabsq	$4622156887561024307, %rcx      ## imm = 0x4025333333333333
-	movq	%rcx, 960(%rax)
-	movq	%rax, 576(%r14)
-	movl	$2, %edi
-	callq	_array_create_by_length
-	movq	%rax, %r15
-	leaq	L_.str(%rip), %rdi
-	callq	_string_create_by_cstr
-	movq	%rax, 576(%r15)
-	leaq	L_.str.1(%rip), %rdi
-	callq	_string_create_by_cstr
-	movq	%rax, 768(%r15)
-	movq	%r15, 768(%r14)
-	movq	576(%r14), %rcx
+	callq	_sample_array_2d
+	movq	24(%rax), %rcx
+	movq	32(%rax), %r14
 	movq	16(%rcx), %rdx
 	testq	%rdx, %rdx
 	je	LBB6_1
@@ -277,53 +299,50 @@ LBB6_1:
 	jmp	LBB6_9
 LBB6_4:
 	andq	$-4, %rdx
-	leaq	1152(%rcx), %rdi
+	leaq	48(%rcx), %rdi
 	xorpd	%xmm0, %xmm0
 	xorl	%esi, %esi
 	.p2align	4, 0x90
 LBB6_5:                                 ## =>This Inner Loop Header: Depth=1
-	addsd	-576(%rdi), %xmm0
-	addsd	-384(%rdi), %xmm0
-	addsd	-192(%rdi), %xmm0
+	addsd	-24(%rdi), %xmm0
+	addsd	-16(%rdi), %xmm0
+	addsd	-8(%rdi), %xmm0
 	addsd	(%rdi), %xmm0
 	addq	$4, %rsi
-	addq	$768, %rdi                      ## imm = 0x300
+	addq	$32, %rdi
 	cmpq	%rsi, %rdx
 	jne	LBB6_5
 LBB6_6:
 	testq	%rax, %rax
 	je	LBB6_9
 ## %bb.7:
-	leaq	(%rsi,%rsi,2), %rdx
-	shlq	$6, %rdx
-	leaq	576(%rdx,%rcx), %rcx
+	leaq	24(%rcx,%rsi,8), %rcx
 	.p2align	4, 0x90
 LBB6_8:                                 ## =>This Inner Loop Header: Depth=1
 	addsd	(%rcx), %xmm0
-	addq	$192, %rcx
+	addq	$8, %rcx
 	decq	%rax
 	jne	LBB6_8
 LBB6_9:
 	callq	_println_d
-	movq	16(%r15), %rcx
+	movq	16(%r14), %rcx
 	testq	%rcx, %rcx
 	je	LBB6_10
 ## %bb.11:
-	movq	576(%r15), %rax
+	movq	24(%r14), %rax
 	cmpq	$1, %rcx
 	je	LBB6_14
 ## %bb.12:
-	movq	%r15, %r14
-	addq	$768, %r14                      ## imm = 0x300
+	leaq	32(%r14), %r15
 	movl	$1, %ebx
 	.p2align	4, 0x90
 LBB6_13:                                ## =>This Inner Loop Header: Depth=1
-	movq	(%r14), %rsi
+	movq	(%r15), %rsi
 	movq	%rax, %rdi
 	callq	_string_concat
 	incq	%rbx
-	addq	$192, %r14
-	cmpq	%rbx, 16(%r15)
+	addq	$8, %r15
+	cmpq	%rbx, 16(%r14)
 	ja	LBB6_13
 	jmp	LBB6_14
 LBB6_10:
@@ -342,9 +361,15 @@ LBB6_14:
                                         ## -- End function
 	.section	__TEXT,__cstring,cstring_literals
 L_.str:                                 ## @.str
-	.asciz	"Hello"
+	.asciz	"In sample_array_double, addresses:"
 
 L_.str.1:                               ## @.str.1
+	.asciz	"In sample_array_string, addresses:"
+
+L_.str.2:                               ## @.str.2
+	.asciz	"Hello"
+
+L_.str.3:                               ## @.str.3
 	.asciz	" PlayScript!"
 
 .subsections_via_symbols

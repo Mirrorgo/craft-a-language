@@ -24,6 +24,12 @@ PlayArray* sample_array_double(){
     //创建数组
     PlayArray * parr = array_create_by_length(3);
 
+    println_cs("In sample_array_double, addresses:");
+    println_l((long)parr);
+    println_l((long)PTR_ARRAY_ELEM(parr,0));
+    println_l((long)PTR_ARRAY_ELEM(parr,1));
+    println_l((long)PTR_ARRAY_ELEM(parr,2));
+
     //给数据元素赋值
     *((double *)PTR_ARRAY_ELEM(parr,0)) = 5;
     *((double *)PTR_ARRAY_ELEM(parr,1)) = 10.5;
@@ -47,6 +53,11 @@ double sum_array_double(PlayArray * parr){
 PlayArray* sample_array_string(){
  //创建数组
     PlayArray * parr = array_create_by_length(2);
+
+    println_cs("In sample_array_string, addresses:");
+    println_l((long)parr);
+    println_l((long)PTR_ARRAY_ELEM(parr,0));
+    println_l((long)PTR_ARRAY_ELEM(parr,1));
 
     //给数据元素赋值
     *((PlayString **)PTR_ARRAY_ELEM(parr,0)) = string_create_by_cstr("Hello");

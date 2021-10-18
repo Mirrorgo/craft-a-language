@@ -5,7 +5,7 @@
 #include <string.h>
 
 //计算字符串中数据部分的地址
-#define PTR_CSTRING(pstr) (char*)(pstr + sizeof(Object) + sizeof(size_t))
+#define PTR_CSTRING(pstr) (char*)((size_t)pstr + sizeof(Object) + sizeof(size_t))
 
 typedef struct _PlayString{
     Object object;

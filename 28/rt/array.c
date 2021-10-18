@@ -25,19 +25,30 @@ PlayArray* array_create_by_length(size_t length){
 }
 
 //获取某个元素
-void* array_get_element(PlayArray* parr, int index){
-    if (index < parr->length){
-        return (void*)(PTR_ARRAY_DATA(parr) + sizeof(unsigned long)*index);
-    }
-    else{
-        return 0;   //todo 这里应该产生运行时异常。
-    }
-}
+// void* array_get_element(PlayArray* parr, int index){
+//     if (index < parr->length){
+//         // return (void*)(PTR_ARRAY_DATA(parr) + sizeof(unsigned long)*index);
+//         long address = (long)parr + 24 + sizeof(unsigned long)*index;
+//         printf("parr=%ld",(long)parr);
+//         printf("address=%ld",address);
+//         return (void*)address;
+//     }
+//     else{
+//         return 0;   //todo 这里应该产生运行时异常。
+//     }
+// }
 
-//获取某个元素的地址，以便赋值。
+// 获取某个元素的地址，以便赋值。
 // void* array_get_element_address(PlayArray* parr, int index){
 //     if (index < parr->length){
-//         return PTR_ARRAY_DATA(parr) + sizeof(unsigned long)*index;
+//         // return PTR_ARRAY_DATA(parr) + sizeof(unsigned long)*index;
+//         long address1 = (long)parr + 24 + sizeof(unsigned long)*index;
+//         long address2 = (long)PTR_ARRAY_DATA(parr) + sizeof(unsigned long)*index;
+//         printf("parr    =%ld\n",(long)parr);
+//         printf("address1=%ld\n",address1);
+//         printf("address2=%ld\n",address2);
+        
+//         return (void*)address1;
 //     }
 //     else{
 //         return 0;   //todo 这里应该产生运行时异常。
