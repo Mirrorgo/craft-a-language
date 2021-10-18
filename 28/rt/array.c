@@ -5,10 +5,14 @@
 #include "array.h"
 #include "mem.h"
 
+// #include <stdio.h>
+
 //创建指定元素个数的数组
 PlayArray* array_create_by_length(size_t length){
     //申请内存
-    size_t size = sizeof(Object) + sizeof(size_t) + sizeof(unsigned char)*(length);
+    size_t size = sizeof(Object) + sizeof(size_t) + sizeof(double)*length;
+
+    // printf("size:%ld\n",size);
 
     PlayArray * parr =  (PlayArray*)PlayAlloc(size);
     

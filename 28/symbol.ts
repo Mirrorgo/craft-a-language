@@ -109,27 +109,36 @@ export enum SymKind{Variable, Function, Class, Interface, Parameter, Prog};
 /////////////////////////////////////////////////////////////////////////
 //一些系统内置的符号
 export let FUN_println = new FunctionSymbol("println", new FunctionType(SysTypes.Void,[SysTypes.Any]),[new VarSymbol("a", SysTypes.String)]);
+export let FUN_println_l = new FunctionSymbol("println", new FunctionType(SysTypes.Void,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
 export let FUN_println_s = new FunctionSymbol("println_s", new FunctionType(SysTypes.Void,[SysTypes.String]),[new VarSymbol("a", SysTypes.String)]);
-export let FUN_println_d = new FunctionSymbol("println_d", new FunctionType(SysTypes.Void,[SysTypes.Number]),[new VarSymbol("a", SysTypes.String)]);
+export let FUN_println_d = new FunctionSymbol("println_d", new FunctionType(SysTypes.Void,[SysTypes.Number]),[new VarSymbol("a", SysTypes.Number)]);
 export let FUN_tick = new FunctionSymbol("tick", new FunctionType(SysTypes.Integer,[]),[]);
 export let FUN_tick_d = new FunctionSymbol("tick_d", new FunctionType(SysTypes.Number,[]),[]);
 export let FUN_integer_to_string = new FunctionSymbol("integer_to_string", new FunctionType(SysTypes.String,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
 
-export let built_ins:Map<string, FunctionSymbol> = new Map([
-    ["println", FUN_println],
-    ["println_s", FUN_println_s],
-    ["println_d", FUN_println_d],
-    ["tick", FUN_tick],
-    ["tick_d", FUN_tick_d],
-    ["integer_to_string", FUN_integer_to_string],
-    // ["string_concat", FUN_string_concat],
-]);
+// export let built_ins:Map<string, FunctionSymbol> = new Map([
+//     ["println", FUN_println],
+//     ["println_s", FUN_println_s],
+//     ["println_d", FUN_println_d],
+//     ["tick", FUN_tick],
+//     ["tick_d", FUN_tick_d],
+//     ["integer_to_string", FUN_integer_to_string],
+//     // ["string_concat", FUN_string_concat],
+// ]);
 
 let FUN_string_create_by_str = new FunctionSymbol("string_create_by_str", new FunctionType(SysTypes.String,[SysTypes.String]),[new VarSymbol("a", SysTypes.String)]);
 let FUN_string_concat = new FunctionSymbol("string_concat", new FunctionType(SysTypes.String,[SysTypes.String,SysTypes.String]),[new VarSymbol("str1", SysTypes.String), new VarSymbol("str2", SysTypes.String)]);
 let FUN_array_create_by_length = new FunctionSymbol("array_create_by_length", new FunctionType(SysTypes.Object,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
 
-export let intrinsics:Map<string, FunctionSymbol> = new Map([
+export let built_ins:Map<string, FunctionSymbol> = new Map([
+    ["println", FUN_println],
+    ["println_l", FUN_println_l],
+    ["println_s", FUN_println_s],
+    ["println_d", FUN_println_d],
+    ["tick", FUN_tick],
+    ["tick_d", FUN_tick_d],
+    ["integer_to_string", FUN_integer_to_string],
+
     ["string_create_by_cstr", FUN_string_create_by_str],
     ["string_concat", FUN_string_concat],
     ["array_create_by_length", FUN_array_create_by_length],

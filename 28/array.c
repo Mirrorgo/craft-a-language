@@ -11,11 +11,12 @@
 
 //看看c语言是如何处理它原生的数组的
 double sum(double a[], int length){
-    double ret = 0;
-    for (int i = 0; i< length; i++){
-        ret += a[i];
-    }
-    return ret;
+    // double ret = 0;
+    // for (int i = 0; i< length; i++){
+    //     ret += a[i];
+    // }
+    // return ret;
+    return a[2]+a[3];
 }
 
 //创建示例的number数组

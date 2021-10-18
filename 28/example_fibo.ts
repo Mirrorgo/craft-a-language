@@ -16,11 +16,11 @@ function fibonacci(n:number):number{
 
 // println(fibonacci(30));
 
-for (let n = 30; n <= 40; n++){
+for (let n:number = 30; n <= 40; n++){
     println(n);
-    let t1 = tick();
+    let t1:number = tick_d();
     println(fibonacci(n));
-    let t2 = tick();
+    let t2:number = tick_d();
     println(t2-t1);
 }
 

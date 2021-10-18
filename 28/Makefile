@@ -143,4 +143,4 @@ playvm : rt_objs
 .PHONY : clean
 clean : 
 	@echo "删除rt/*.o example_fibo example playvm..."
-	@-rm -fr rt/*.o example_fibo example playvm
+	@-rm -fr rt/*.o example_fibo fibo foo example playvm exmaple_for for exmaple_if exmaple_str str exmaple_array array exmaple_tail tail exmaple_assign assign exmaple_fact fact exmaple_param param exmaple_reg exmaple_unary unary

@@ -1,8 +1,15 @@
-
 //先用这个简单的测试程序
-let ages:number[] = [8, 18, 28];
-ages[2] = 38; 
-println(ages[2]);
+let ages:number[] = [8.0, 18.0, 28];  //技术点：整型字面量28要作为浮点型看待
+ages[2] = 38;     //技术点：1.给数组元素赋值；2.整数下标
+
+let sum:number = 0;
+for (let i:number = 0; i<3; i++){
+    sum = sum + ages[i];     //技术点:浮点数转整数，计算出ages的下标
+    println(ages[i]);
+}
+println(sum);
+
+
 
 //下面的程序还在调试中。
 

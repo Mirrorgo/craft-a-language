@@ -7,7 +7,7 @@
  *  
  */
 
-import {FunctionSymbol, VarSymbol, intrinsics} from './symbol'
+import {FunctionSymbol, VarSymbol, built_ins} from './symbol'
 import {AstVisitor, AstNode, Block, Prog, VariableDecl, FunctionDecl, FunctionCall, Statement, Expression, ExpressionStatement, Binary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, Unary, ForStatement} from './ast';
 
 export class TailAnalyzer extends AstVisitor{

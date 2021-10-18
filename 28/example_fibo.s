@@ -14,23 +14,23 @@ _fibonacci:
     movq	%rsp, %rbp
     subq	$16, %rsp
 ## bb.1
-    ucomisd	LCPI0_0(%rip), %xmm0		#  ucomisd	doubleIndex(0), var0:double
+    ucomisd	LCPI0_0(%rip), %xmm0		#  ucomisd	doubleIndex(0), var0(n):double
     ja	LBB0_3
 ## bb.2
     jmp	LBB0_4
 LBB0_3:
-    subsd	LCPI0_0(%rip), %xmm0		#  subsd	doubleIndex(0), var0:double
+    subsd	LCPI0_0(%rip), %xmm0		#  subsd	doubleIndex(0), var0(n):double
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     callq	_fibonacci
-    movsd	%xmm0, %xmm1				#  movsd	%xmm0, var1:double
+    movsd	%xmm0, %xmm1				#  movsd	%xmm0, var1(temp):double
     movsd	-8(%rbp), %xmm0		#  reload	var0
-    subsd	LCPI0_1(%rip), %xmm0		#  subsd	doubleIndex(1), var0:double
+    subsd	LCPI0_1(%rip), %xmm0		#  subsd	doubleIndex(1), var0(n):double
     movsd	%xmm1, -16(%rbp)		#  spill	var1
     callq	_fibonacci
-    movsd	%xmm0, %xmm2				#  movsd	%xmm0, var2:double
+    movsd	%xmm0, %xmm2				#  movsd	%xmm0, var2(temp):double
     movsd	-16(%rbp), %xmm1		#  reload	var1
-    addsd	%xmm2, %xmm1				#  addsd	var2:double, var1:double
-    movsd	%xmm1, %xmm0				#  movsd	var1:double, %xmm0
+    addsd	%xmm2, %xmm1				#  addsd	var2(temp):double, var1(temp):double
+    movsd	%xmm1, %xmm0				#  movsd	var1(temp):double, %xmm0
 LBB0_4:
     addq	$16, %rsp
     popq	%rbp
@@ -55,9 +55,9 @@ _main:
     movq	%rsp, %rbp
     subq	$16, %rsp
 ## bb.1
-    movsd	LCPI1_0(%rip), %xmm0		#  movsd	doubleIndex(0), var0:double
+    movsd	LCPI1_0(%rip), %xmm0		#  movsd	doubleIndex(0), var0(n):double
 LBB1_2:
-    ucomisd	LCPI1_1(%rip), %xmm0		#  ucomisd	doubleIndex(1), var0:double
+    ucomisd	LCPI1_1(%rip), %xmm0		#  ucomisd	doubleIndex(1), var0(n):double
     ja	LBB1_4
 ## bb.3
     movsd	%xmm0, -8(%rbp)		#  spill	var0
@@ -65,13 +65,13 @@ LBB1_2:
     movsd	-8(%rbp), %xmm0		#  reload	var0
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     callq	_tick_d
-    movsd	%xmm0, %xmm1				#  movsd	%xmm0, var3:double
+    movsd	%xmm0, %xmm1				#  movsd	%xmm0, var3(temp):double
     movsd	-8(%rbp), %xmm0		#  reload	var0
-    movsd	%xmm1, %xmm2				#  movsd	var3:double, var1:double
+    movsd	%xmm1, %xmm2				#  movsd	var3(temp):double, var1(t1):double
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     movsd	%xmm2, -16(%rbp)		#  spill	var1
     callq	_fibonacci
-    movsd	%xmm0, %xmm3				#  movsd	%xmm0, var4:double
+    movsd	%xmm0, %xmm3				#  movsd	%xmm0, var4(temp):double
     movsd	-8(%rbp), %xmm0		#  reload	var0
     movsd	-16(%rbp), %xmm2		#  reload	var1
     movsd	%xmm0, -8(%rbp)		#  spill	var0
@@ -83,19 +83,19 @@ LBB1_2:
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     movsd	%xmm2, -16(%rbp)		#  spill	var1
     callq	_tick_d
-    movsd	%xmm0, %xmm4				#  movsd	%xmm0, var5:double
+    movsd	%xmm0, %xmm4				#  movsd	%xmm0, var5(temp):double
     movsd	-8(%rbp), %xmm0		#  reload	var0
     movsd	-16(%rbp), %xmm2		#  reload	var1
-    movsd	%xmm4, %xmm5				#  movsd	var5:double, var2:double
-    subsd	%xmm2, %xmm5				#  subsd	var1:double, var2:double
+    movsd	%xmm4, %xmm5				#  movsd	var5(temp):double, var2(t2):double
+    subsd	%xmm2, %xmm5				#  subsd	var1(t1):double, var2(t2):double
     movsd	%xmm0, -8(%rbp)		#  spill	var0
     movsd	%xmm5, %xmm0
     callq	_println_d
     movsd	-8(%rbp), %xmm0		#  reload	var0
-    movsd	%xmm0, %xmm6				#  movsd	var0:double, var6:double
-    movsd	%xmm0, %xmm7				#  movsd	var0:double, var7:double
-    addsd	LCPI1_2(%rip), %xmm6		#  addsd	doubleIndex(2), var6:double
-    movsd	%xmm6, %xmm0				#  movsd	var6:double, var0:double
+    movsd	%xmm0, %xmm6				#  movsd	var0(n):double, var6(temp):double
+    movsd	%xmm0, %xmm7				#  movsd	var0(n):double, var7(temp):double
+    addsd	LCPI1_2(%rip), %xmm6		#  addsd	doubleIndex(2), var6(temp):double
+    movsd	%xmm6, %xmm0				#  movsd	var6(temp):double, var0(n):double
     jmp	LBB1_2
 LBB1_4:
     addq	$16, %rsp

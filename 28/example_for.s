@@ -15,17 +15,17 @@ _main:
     pushq	%rbp
     movq	%rsp, %rbp
 ## bb.1
-    movsd	LCPI0_0(%rip), %xmm0		#  movsd	doubleIndex(0), var0:double
-    movsd	LCPI0_0(%rip), %xmm1		#  movsd	doubleIndex(0), var1:double
+    movsd	LCPI0_0(%rip), %xmm0		#  movsd	doubleIndex(0), var0(sum):double
+    movsd	LCPI0_0(%rip), %xmm1		#  movsd	doubleIndex(0), var1(i):double
 LBB0_2:
-    ucomisd	LCPI0_1(%rip), %xmm1		#  ucomisd	doubleIndex(1), var1:double
+    ucomisd	LCPI0_1(%rip), %xmm1		#  ucomisd	doubleIndex(1), var1(i):double
     jae	LBB0_4
 ## bb.3
-    addsd	%xmm1, %xmm0				#  addsd	var1:double, var0:double
-    movsd	%xmm1, %xmm2				#  movsd	var1:double, var2:double
-    movsd	%xmm1, %xmm3				#  movsd	var1:double, var3:double
-    addsd	LCPI0_2(%rip), %xmm2		#  addsd	doubleIndex(2), var2:double
-    movsd	%xmm2, %xmm1				#  movsd	var2:double, var1:double
+    addsd	%xmm1, %xmm0				#  addsd	var1(i):double, var0(sum):double
+    movsd	%xmm1, %xmm2				#  movsd	var1(i):double, var2(temp):double
+    movsd	%xmm1, %xmm3				#  movsd	var1(i):double, var3(temp):double
+    addsd	LCPI0_2(%rip), %xmm2		#  addsd	doubleIndex(2), var2(temp):double
+    movsd	%xmm2, %xmm1				#  movsd	var2(temp):double, var1(i):double
     jmp	LBB0_2
 LBB0_4:
     callq	_println_d

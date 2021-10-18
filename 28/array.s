@@ -10,42 +10,13 @@ _sum:                                   ## @sum
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	movq	%rdi, -8(%rbp)
-	movl	%esi, -12(%rbp)
-	xorps	%xmm0, %xmm0
-	movsd	%xmm0, -24(%rbp)
-	movl	$0, -28(%rbp)
-LBB0_1:                                 ## =>This Inner Loop Header: Depth=1
-	movl	-28(%rbp), %eax
-	cmpl	-12(%rbp), %eax
-	jge	LBB0_4
-## %bb.2:                               ##   in Loop: Header=BB0_1 Depth=1
-	movq	-8(%rbp), %rax
-	movslq	-28(%rbp), %rcx
-	movsd	(%rax,%rcx,8), %xmm0            ## xmm0 = mem[0],zero
-	addsd	-24(%rbp), %xmm0
-	movsd	%xmm0, -24(%rbp)
-## %bb.3:                               ##   in Loop: Header=BB0_1 Depth=1
-	movl	-28(%rbp), %eax
-	addl	$1, %eax
-	movl	%eax, -28(%rbp)
-	jmp	LBB0_1
-LBB0_4:
-	movsd	-24(%rbp), %xmm0                ## xmm0 = mem[0],zero
+	movsd	16(%rdi), %xmm0                 ## xmm0 = mem[0],zero
+	addsd	24(%rdi), %xmm0
 	popq	%rbp
 	retq
 	.cfi_endproc
                                         ## -- End function
-	.section	__TEXT,__literal8,8byte_literals
-	.p2align	3                               ## -- Begin function sample_array_double
-LCPI1_0:
-	.quad	0x4025333333333333              ## double 10.6
-LCPI1_1:
-	.quad	0x4025000000000000              ## double 10.5
-LCPI1_2:
-	.quad	0x4014000000000000              ## double 5
-	.section	__TEXT,__text,regular,pure_instructions
-	.globl	_sample_array_double
+	.globl	_sample_array_double            ## -- Begin function sample_array_double
 	.p2align	4, 0x90
 _sample_array_double:                   ## @sample_array_double
 	.cfi_startproc
@@ -55,21 +26,14 @@ _sample_array_double:                   ## @sample_array_double
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$16, %rsp
 	movl	$3, %edi
 	callq	_array_create_by_length
-	movsd	LCPI1_0(%rip), %xmm0            ## xmm0 = mem[0],zero
-	movsd	LCPI1_1(%rip), %xmm1            ## xmm1 = mem[0],zero
-	movsd	LCPI1_2(%rip), %xmm2            ## xmm2 = mem[0],zero
-	movq	%rax, -8(%rbp)
-	movq	-8(%rbp), %rax
-	movsd	%xmm2, 576(%rax)
-	movq	-8(%rbp), %rax
-	movsd	%xmm1, 768(%rax)
-	movq	-8(%rbp), %rax
-	movsd	%xmm0, 960(%rax)
-	movq	-8(%rbp), %rax
-	addq	$16, %rsp
+	movabsq	$4617315517961601024, %rcx      ## imm = 0x4014000000000000
+	movq	%rcx, 576(%rax)
+	movabsq	$4622100592565682176, %rcx      ## imm = 0x4025000000000000
+	movq	%rcx, 768(%rax)
+	movabsq	$4622156887561024307, %rcx      ## imm = 0x4025333333333333
+	movq	%rcx, 960(%rax)
 	popq	%rbp
 	retq
 	.cfi_endproc
@@ -84,33 +48,52 @@ _sum_array_double:                      ## @sum_array_double
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	movq	%rdi, -8(%rbp)
+	movq	16(%rdi), %rcx
+	testq	%rcx, %rcx
+	je	LBB2_1
+## %bb.2:
+	leaq	-1(%rcx), %rdx
+	movl	%ecx, %eax
+	andl	$3, %eax
+	cmpq	$3, %rdx
+	jae	LBB2_8
+## %bb.3:
+	xorpd	%xmm0, %xmm0
+	xorl	%edx, %edx
+	jmp	LBB2_4
+LBB2_1:
 	xorps	%xmm0, %xmm0
-	movsd	%xmm0, -16(%rbp)
-	movl	$0, -20(%rbp)
-LBB2_1:                                 ## =>This Inner Loop Header: Depth=1
-	movslq	-20(%rbp), %rax
-	movq	-8(%rbp), %rcx
-	cmpq	16(%rcx), %rax
-	jae	LBB2_4
-## %bb.2:                               ##   in Loop: Header=BB2_1 Depth=1
-	movq	-8(%rbp), %rax
-	addq	$384, %rax                      ## imm = 0x180
-	addq	$192, %rax
-	movslq	-20(%rbp), %rcx
-	shlq	$3, %rcx
-	imulq	$24, %rcx, %rcx
-	addq	%rcx, %rax
-	movsd	(%rax), %xmm0                   ## xmm0 = mem[0],zero
-	addsd	-16(%rbp), %xmm0
-	movsd	%xmm0, -16(%rbp)
-## %bb.3:                               ##   in Loop: Header=BB2_1 Depth=1
-	movl	-20(%rbp), %eax
-	addl	$1, %eax
-	movl	%eax, -20(%rbp)
-	jmp	LBB2_1
+	popq	%rbp
+	retq
+LBB2_8:
+	andq	$-4, %rcx
+	leaq	1152(%rdi), %rsi
+	xorpd	%xmm0, %xmm0
+	xorl	%edx, %edx
+	.p2align	4, 0x90
+LBB2_9:                                 ## =>This Inner Loop Header: Depth=1
+	addsd	-576(%rsi), %xmm0
+	addsd	-384(%rsi), %xmm0
+	addsd	-192(%rsi), %xmm0
+	addsd	(%rsi), %xmm0
+	addq	$4, %rdx
+	addq	$768, %rsi                      ## imm = 0x300
+	cmpq	%rdx, %rcx
+	jne	LBB2_9
 LBB2_4:
-	movsd	-16(%rbp), %xmm0                ## xmm0 = mem[0],zero
+	testq	%rax, %rax
+	je	LBB2_7
+## %bb.5:
+	leaq	(%rdx,%rdx,2), %rcx
+	shlq	$6, %rcx
+	leaq	576(%rcx,%rdi), %rcx
+	.p2align	4, 0x90
+LBB2_6:                                 ## =>This Inner Loop Header: Depth=1
+	addsd	(%rcx), %xmm0
+	addq	$192, %rcx
+	decq	%rax
+	jne	LBB2_6
+LBB2_7:
 	popq	%rbp
 	retq
 	.cfi_endproc
@@ -125,20 +108,21 @@ _sample_array_string:                   ## @sample_array_string
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$16, %rsp
+	pushq	%rbx
+	pushq	%rax
+	.cfi_offset %rbx, -24
 	movl	$2, %edi
 	callq	_array_create_by_length
-	movq	%rax, -8(%rbp)
+	movq	%rax, %rbx
 	leaq	L_.str(%rip), %rdi
 	callq	_string_create_by_cstr
-	movq	-8(%rbp), %rcx
-	movq	%rax, 576(%rcx)
+	movq	%rax, 576(%rbx)
 	leaq	L_.str.1(%rip), %rdi
 	callq	_string_create_by_cstr
-	movq	-8(%rbp), %rcx
-	movq	%rax, 768(%rcx)
-	movq	-8(%rbp), %rax
-	addq	$16, %rsp
+	movq	%rax, 768(%rbx)
+	movq	%rbx, %rax
+	addq	$8, %rsp
+	popq	%rbx
 	popq	%rbp
 	retq
 	.cfi_endproc
@@ -153,44 +137,41 @@ _concat_array_string:                   ## @concat_array_string
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$32, %rsp
-	movq	%rdi, -8(%rbp)
-	movq	-8(%rbp), %rax
-	cmpq	$0, 16(%rax)
-	jbe	LBB4_2
-## %bb.1:
-	movq	-8(%rbp), %rax
-	movq	576(%rax), %rax
-	movq	%rax, -16(%rbp)
-LBB4_2:
-	movl	$1, -20(%rbp)
-LBB4_3:                                 ## =>This Inner Loop Header: Depth=1
-	movslq	-20(%rbp), %rax
-	movq	-8(%rbp), %rcx
-	cmpq	16(%rcx), %rax
-	jae	LBB4_6
-## %bb.4:                               ##   in Loop: Header=BB4_3 Depth=1
-	movq	-8(%rbp), %rax
-	addq	$384, %rax                      ## imm = 0x180
-	addq	$192, %rax
-	movslq	-20(%rbp), %rcx
-	shlq	$3, %rcx
-	imulq	$24, %rcx, %rcx
-	addq	%rcx, %rax
-	movq	(%rax), %rax
-	movq	%rax, -32(%rbp)
-	movq	-16(%rbp), %rdi
-	movq	-32(%rbp), %rsi
+	pushq	%r15
+	pushq	%r14
+	pushq	%rbx
+	pushq	%rax
+	.cfi_offset %rbx, -40
+	.cfi_offset %r14, -32
+	.cfi_offset %r15, -24
+	movq	16(%rdi), %rcx
+	testq	%rcx, %rcx
+	je	LBB4_1
+## %bb.2:
+	movq	%rdi, %r14
+	movq	576(%rdi), %rax
+	cmpq	$1, %rcx
+	je	LBB4_5
+## %bb.3:
+	leaq	768(%r14), %r15
+	movl	$1, %ebx
+	.p2align	4, 0x90
+LBB4_4:                                 ## =>This Inner Loop Header: Depth=1
+	movq	(%r15), %rsi
+	movq	%rax, %rdi
 	callq	_string_concat
-	movq	%rax, -16(%rbp)
-## %bb.5:                               ##   in Loop: Header=BB4_3 Depth=1
-	movl	-20(%rbp), %eax
-	addl	$1, %eax
-	movl	%eax, -20(%rbp)
-	jmp	LBB4_3
-LBB4_6:
-	movq	-16(%rbp), %rax
-	addq	$32, %rsp
+	incq	%rbx
+	addq	$192, %r15
+	cmpq	%rbx, 16(%r14)
+	ja	LBB4_4
+	jmp	LBB4_5
+LBB4_1:
+                                        ## implicit-def: $rax
+LBB4_5:
+	addq	$8, %rsp
+	popq	%rbx
+	popq	%r14
+	popq	%r15
 	popq	%rbp
 	retq
 	.cfi_endproc
@@ -205,18 +186,35 @@ _sample_array_2d:                       ## @sample_array_2d
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$16, %rsp
+	pushq	%r14
+	pushq	%rbx
+	.cfi_offset %rbx, -32
+	.cfi_offset %r14, -24
 	movl	$2, %edi
 	callq	_array_create_by_length
-	movq	%rax, -8(%rbp)
-	callq	_sample_array_double
-	movq	-8(%rbp), %rcx
-	movq	%rax, 576(%rcx)
-	callq	_sample_array_string
-	movq	-8(%rbp), %rcx
-	movq	%rax, 768(%rcx)
-	movq	-8(%rbp), %rax
-	addq	$16, %rsp
+	movq	%rax, %r14
+	movl	$3, %edi
+	callq	_array_create_by_length
+	movabsq	$4617315517961601024, %rcx      ## imm = 0x4014000000000000
+	movq	%rcx, 576(%rax)
+	movabsq	$4622100592565682176, %rcx      ## imm = 0x4025000000000000
+	movq	%rcx, 768(%rax)
+	movabsq	$4622156887561024307, %rcx      ## imm = 0x4025333333333333
+	movq	%rcx, 960(%rax)
+	movq	%rax, 576(%r14)
+	movl	$2, %edi
+	callq	_array_create_by_length
+	movq	%rax, %rbx
+	leaq	L_.str(%rip), %rdi
+	callq	_string_create_by_cstr
+	movq	%rax, 576(%rbx)
+	leaq	L_.str.1(%rip), %rdi
+	callq	_string_create_by_cstr
+	movq	%rax, 768(%rbx)
+	movq	%rbx, 768(%r14)
+	movq	%r14, %rax
+	popq	%rbx
+	popq	%r14
 	popq	%rbp
 	retq
 	.cfi_endproc
@@ -231,24 +229,113 @@ _main:                                  ## @main
 	.cfi_offset %rbp, -16
 	movq	%rsp, %rbp
 	.cfi_def_cfa_register %rbp
-	subq	$32, %rsp
-	callq	_sample_array_2d
-	movq	%rax, -8(%rbp)
-	movq	-8(%rbp), %rax
-	movq	576(%rax), %rax
-	movq	%rax, -16(%rbp)
-	movq	-8(%rbp), %rax
-	movq	768(%rax), %rax
-	movq	%rax, -24(%rbp)
-	movq	-16(%rbp), %rdi
-	callq	_sum_array_double
+	pushq	%r15
+	pushq	%r14
+	pushq	%rbx
+	pushq	%rax
+	.cfi_offset %rbx, -40
+	.cfi_offset %r14, -32
+	.cfi_offset %r15, -24
+	movl	$2, %edi
+	callq	_array_create_by_length
+	movq	%rax, %r14
+	movl	$3, %edi
+	callq	_array_create_by_length
+	movabsq	$4617315517961601024, %rcx      ## imm = 0x4014000000000000
+	movq	%rcx, 576(%rax)
+	movabsq	$4622100592565682176, %rcx      ## imm = 0x4025000000000000
+	movq	%rcx, 768(%rax)
+	movabsq	$4622156887561024307, %rcx      ## imm = 0x4025333333333333
+	movq	%rcx, 960(%rax)
+	movq	%rax, 576(%r14)
+	movl	$2, %edi
+	callq	_array_create_by_length
+	movq	%rax, %r15
+	leaq	L_.str(%rip), %rdi
+	callq	_string_create_by_cstr
+	movq	%rax, 576(%r15)
+	leaq	L_.str.1(%rip), %rdi
+	callq	_string_create_by_cstr
+	movq	%rax, 768(%r15)
+	movq	%r15, 768(%r14)
+	movq	576(%r14), %rcx
+	movq	16(%rcx), %rdx
+	testq	%rdx, %rdx
+	je	LBB6_1
+## %bb.2:
+	leaq	-1(%rdx), %rsi
+	movl	%edx, %eax
+	andl	$3, %eax
+	cmpq	$3, %rsi
+	jae	LBB6_4
+## %bb.3:
+	xorpd	%xmm0, %xmm0
+	xorl	%esi, %esi
+	jmp	LBB6_6
+LBB6_1:
+	xorpd	%xmm0, %xmm0
+	jmp	LBB6_9
+LBB6_4:
+	andq	$-4, %rdx
+	leaq	1152(%rcx), %rdi
+	xorpd	%xmm0, %xmm0
+	xorl	%esi, %esi
+	.p2align	4, 0x90
+LBB6_5:                                 ## =>This Inner Loop Header: Depth=1
+	addsd	-576(%rdi), %xmm0
+	addsd	-384(%rdi), %xmm0
+	addsd	-192(%rdi), %xmm0
+	addsd	(%rdi), %xmm0
+	addq	$4, %rsi
+	addq	$768, %rdi                      ## imm = 0x300
+	cmpq	%rsi, %rdx
+	jne	LBB6_5
+LBB6_6:
+	testq	%rax, %rax
+	je	LBB6_9
+## %bb.7:
+	leaq	(%rsi,%rsi,2), %rdx
+	shlq	$6, %rdx
+	leaq	576(%rdx,%rcx), %rcx
+	.p2align	4, 0x90
+LBB6_8:                                 ## =>This Inner Loop Header: Depth=1
+	addsd	(%rcx), %xmm0
+	addq	$192, %rcx
+	decq	%rax
+	jne	LBB6_8
+LBB6_9:
 	callq	_println_d
-	movq	-24(%rbp), %rdi
-	callq	_concat_array_string
+	movq	16(%r15), %rcx
+	testq	%rcx, %rcx
+	je	LBB6_10
+## %bb.11:
+	movq	576(%r15), %rax
+	cmpq	$1, %rcx
+	je	LBB6_14
+## %bb.12:
+	movq	%r15, %r14
+	addq	$768, %r14                      ## imm = 0x300
+	movl	$1, %ebx
+	.p2align	4, 0x90
+LBB6_13:                                ## =>This Inner Loop Header: Depth=1
+	movq	(%r14), %rsi
+	movq	%rax, %rdi
+	callq	_string_concat
+	incq	%rbx
+	addq	$192, %r14
+	cmpq	%rbx, 16(%r15)
+	ja	LBB6_13
+	jmp	LBB6_14
+LBB6_10:
+                                        ## implicit-def: $rax
+LBB6_14:
 	movq	%rax, %rdi
 	callq	_println_s
 	xorl	%eax, %eax
-	addq	$32, %rsp
+	addq	$8, %rsp
+	popq	%rbx
+	popq	%r14
+	popq	%r15
 	popq	%rbp
 	retq
 	.cfi_endproc

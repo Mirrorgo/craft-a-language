@@ -7,7 +7,7 @@
  *  
  */
 
-import {FunctionSymbol, VarSymbol, intrinsics} from './symbol'
+import {FunctionSymbol, VarSymbol, built_ins} from './symbol'
 import {AstVisitor, AstNode, Block, Prog, VariableDecl, FunctionDecl, FunctionCall, Statement, Expression, ExpressionStatement, Binary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, Unary, ForStatement, ArrayLiteral, IndexedExp} from './ast';
 import { assert } from 'console';
 import { Op } from './scanner';
@@ -139,6 +139,10 @@ enum OpCode{
     comisd,
     ucomisd,
 
+    cvttsd2si = 240,  //double 到long或int都可以，会导致截断, 第一个操作数可以是内存
+    cvtsi2sdq,        //从long到double
+
+
     //伪指令
     declVar = 300,       //变量声明
     reload,        //重新装载被溢出到内存的变量到寄存器
@@ -160,8 +164,8 @@ class OpCodeUtil{
 
     static adds:OpCode[] = [OpCode.addl, OpCode.addq, OpCode.addsd];
     static subs:OpCode[] = [OpCode.subl, OpCode.subq, OpCode.subsd];
-    static muls:OpCode[] = [OpCode.mull, OpCode.mulq, OpCode.mulsd];
-    static divs:OpCode[] = [OpCode.divl, OpCode.divq, OpCode.divsd];
+    static muls:OpCode[] = [OpCode.mull, OpCode.imulq, OpCode.mulsd];
+    static divs:OpCode[] = [OpCode.divl, OpCode.divq, OpCode.divsd];  //todo：长整型的div指令待定
     static movs:OpCode[] = [OpCode.movl, OpCode.movq, OpCode.movsd];  
     static cmps:OpCode[] = [OpCode.cmpl, OpCode.cmpq, OpCode.ucomisd];
     static jgs:OpCode[] = [OpCode.jg, OpCode.jg, OpCode.ja];
@@ -916,7 +920,7 @@ class AsmGenerator extends AstVisitor{
     private asmModule:AsmModule|null = null;
 
     //对象头的大小
-    private OBJECT_HEADER_SIZE = 20;
+    private Array_Data_Offset = 24;
 
     //用来存放返回值的位置
     // private returnSlot:Oprand = new Oprand(OprandKind.returnSlot, -1);
@@ -1227,7 +1231,7 @@ class AsmGenerator extends AstVisitor{
                     let args:Oprand[] = [];
                     args.push(left);
                     args.push(right);
-                    dest = this.callIntrinsics("string_concat", args);
+                    dest = this.callBuiltIns("string_concat", args);
                 }
                 else{
                     // this.movIfNotSame(left,dest);
@@ -1314,6 +1318,13 @@ class AsmGenerator extends AstVisitor{
      * @param u 
      */
     visitUnary(u:Unary):any{
+        //短路：直接返回constValue
+        // if (u.constValue){
+        //     if (TypeUtil.LE(u.theType)
+        //     return;
+        // }
+
+
         let insts = this.getCurrentBB().insts;
 
         let oprand = this.visit(u.exp) as Oprand;
@@ -1425,7 +1436,7 @@ class AsmGenerator extends AstVisitor{
             args.push(tempVar);
 
             //调用内置函数，返回值是PlayString对象的地址
-            return this.callIntrinsics("string_create_by_cstr", args);
+            return this.callBuiltIns("string_create_by_cstr", args);
         }
     }
 
@@ -1437,9 +1448,11 @@ class AsmGenerator extends AstVisitor{
         //创建数组对象，返回值是对象的地址，放在一个变量里，会被放在寄存器里
         let args:Oprand[] = [];
         args.push(new Oprand(OprandKind.immediate, literal.exps.length));
-        let arrOprand = this.callIntrinsics("array_create_by_length",args);
+        let arrOprand = this.callBuiltIns("array_create_by_length",args);
 
+        //类型要从数组的基础类型来计算，避免数组是number[]，而数组元素是integer的情况
         let dataType = getCpuDataType((literal.theType as ArrayType).baseType);
+
         if (arrOprand.kind == OprandKind.varIndex){
             let insts = this.getCurrentBB().insts;
             //求每个元素的值，并设置到数组
@@ -1452,7 +1465,7 @@ class AsmGenerator extends AstVisitor{
                     insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.double), src, tempVar));
                     src = tempVar;
                 }
-                let offset = this.OBJECT_HEADER_SIZE + i*8;
+                let offset = this.Array_Data_Offset + i*8;
                 let dest = new LogicalMemAddress(arrOprand.value as number, offset);
                 insts.push(new Inst_2(OpCodeUtil.movOp(dataType), src, dest));
             }
@@ -1466,6 +1479,8 @@ class AsmGenerator extends AstVisitor{
     visitIndexedExp(exp:IndexedExp):any{
         //获取对象引用
         let obj = this.visit(exp.baseExp);
+
+        // this.callBuiltIns("println_l", [obj]);
 
         //获取下标值
         let indexOprand = this.visit(exp.indexExp);
@@ -1488,7 +1503,7 @@ class AsmGenerator extends AstVisitor{
         //创建一个内存类型的Oprand
         if(indexOprand.kind == OprandKind.immediate){ //下标是个立即数
             let index = indexOprand.value as number;
-            let offset = this.OBJECT_HEADER_SIZE + index*8;
+            let offset = this.Array_Data_Offset + index*8;
             // if (exp.isLeftValue){ //返回左值，也就是元素地址即可
             //     let offsetOprand = new Oprand(OprandKind.immediate, offset);
             //     let tempVar = this.allocateTempVar(CpuDataType.int64);
@@ -1502,13 +1517,28 @@ class AsmGenerator extends AstVisitor{
         }
         else{ //下标不是立即数，那就加指令计算出元素地址来
             //先用乘法计算出地址偏移量offset
+            //1.把下标挪到寄存器
             let tempVar = this.allocateTempVar(CpuDataType.int64);
-            insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), indexOprand, tempVar));
+            if (exp.baseExp.theType == SysTypes.Integer){
+                insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), indexOprand, tempVar));
+            }
+            else{ //如果是浮点数，要进行类型转换
+                insts.push(new Inst_2(OpCode.cvttsd2si, indexOprand, tempVar));
+            }
+            
+            //把下标乘以8
             let bytesOprand = new Oprand(OprandKind.immediate, 8);
             insts.push(new Inst_2(OpCodeUtil.mulOp(CpuDataType.int64), bytesOprand, tempVar));
 
             //再加上对象的地址
             insts.push(new Inst_2(OpCodeUtil.addOp(CpuDataType.int64), obj, tempVar));
+
+            //再加上对象头和length的大小
+            let offsetOprand = new Oprand(OprandKind.immediate, this.Array_Data_Offset);
+            insts.push(new Inst_2(OpCodeUtil.addOp(CpuDataType.int64), offsetOprand, tempVar));
+
+            //调试：打印地址
+            // this.callBuiltIns("println_l", [tempVar]);
 
             if(exp.isLeftValue){//返回左值，也就是内存地址
                 rtn = tempVar; 
@@ -1521,13 +1551,29 @@ class AsmGenerator extends AstVisitor{
         return rtn;
     }
 
-    private callIntrinsics(intrinsic:string, args:Oprand[]):any{
+    private callBuiltIns(funName:string, args:Oprand[], typeHind:Type|null=null):any{
+        if (funName == "println"){
+            if(typeHind){
+                if (typeHind === SysTypes.Integer)
+                    funName += "_l";  
+                else if (TypeUtil.LE(typeHind, SysTypes.Number))
+                    funName += "_d";  
+                else if (typeHind === SysTypes.String)
+                    funName += "_s";
+            }
+        }
+        else if(funName == "tick"){
+            if(typeHind && TypeUtil.LE(typeHind, SysTypes.Number)){
+                funName += "_d";
+            }
+        }
+
         let insts = this.getCurrentBB().insts;
 
-        let functionSym = intrinsics.get(intrinsic) as FunctionSymbol;
+        let functionSym = built_ins.get(funName) as FunctionSymbol;
         let functionType = functionSym.theType as FunctionType;
 
-        insts.push(new Inst_1(OpCode.callq, new FunctionOprand(intrinsic, args,functionType)));
+        insts.push(new Inst_1(OpCode.callq, new FunctionOprand(funName, args,functionType)));
 
         return this.postFunctionCall(insts, functionType);
     }
@@ -1541,13 +1587,19 @@ class AsmGenerator extends AstVisitor{
         //当前函数不是叶子函数
         this.asmModule?.isLeafFunction.set(this.s.functionSym as FunctionSymbol, false);
 
-        let insts = this.getCurrentBB().insts;
-
         let args:Oprand[] = [];
         for(let arg of functionCall.arguments){
             let oprand = this.visit(arg) as Oprand;
             args.push(oprand);
         }
+
+        //短路，调用内置函数
+        if (built_ins.has(functionCall.name)){
+            
+            return this.callBuiltIns(functionCall.name,args,functionCall.arguments.length > 0 ? functionCall.arguments[0].theType as Type:null);
+        }
+
+        let insts = this.getCurrentBB().insts;
 
         let functionSym = functionCall.sym as FunctionSymbol;
         let functionType = functionSym.theType as FunctionType;
@@ -1572,21 +1624,8 @@ class AsmGenerator extends AstVisitor{
         else if (isTailCall){
             op = OpCode.tailCall;
         }
-
-        //系统函数，要修改成调用double版
-        let funName = functionCall.name;
-        if (funName == "println"){
-            let t = functionCall.arguments[0].theType as Type;
-            if (TypeUtil.LE(t, SysTypes.Number))
-                funName += "_d";  
-            else if (t === SysTypes.String)
-                funName += "_s";
-        }
-        else if(funName == "tick"){
-            funName += "_d";
-        }
  
-        insts.push(new Inst_1(op, new FunctionOprand(funName, args,functionType)));
+        insts.push(new Inst_1(op, new FunctionOprand(functionCall.name, args,functionType)));
 
         //把返回值拷贝到一个临时变量，并返回这个临时变量
         //并且要重新装载溢出的变量        
@@ -2713,7 +2752,8 @@ function getCpuDataType(t:Type):CpuDataType{
         dataType = CpuDataType.int64;
     }
     else if (t === SysTypes.Integer){
-        dataType = CpuDataType.int32;
+        // dataType = CpuDataType.int32;
+        dataType = CpuDataType.int64;     //暂时都只用long
     }
     else if (t === SysTypes.Number || t === SysTypes.Decimal){
         dataType = CpuDataType.double;

@@ -5,6 +5,7 @@
 #ifndef SYSFUNCS_H
 #define SYSFUNCS_H
 
+#include "string.h" 
 
 //打印一个整数
 void println(int n);
