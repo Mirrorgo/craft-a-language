@@ -1495,6 +1495,7 @@ class Lower {
             let bytes = this.spillOffset + this.numArgsOnStack * 8 + this.usedCalleeProtectedRegs.length * 8;
             this.canUseRedZone = bytes < 128;
         }
+        this.canUseRedZone = false; //todo 暂时关闭使用RedZone,因为在28节处理字符串数组时遇到一点问题。
         //添加序曲
         //新增加一个BasicBlock
         let bb = new BasicBlock();
@@ -1913,7 +1914,7 @@ class Lower {
             else {
                 let reg = this.getFreeRegister(oprand.dataType, liveVars);
                 if (reg == null) {
-                    reg = this.spillARegister(newInsts);
+                    reg = this.spillARegister(oprand.dataType, newInsts);
                 }
                 this.assignRegToVar(varIndex, reg);
             }
@@ -1991,12 +1992,13 @@ class Lower {
     /**
      * 选一个寄存器，溢出出去。
      */
-    spillARegister(newInsts) {
+    spillARegister(dataType, newInsts) {
         for (let varIndex of this.loweredVars.keys()) {
             let oprand = this.loweredVars.get(varIndex);
             // if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)!=-1){
-            if (oprand.kind == OprandKind.register) {
+            if (oprand instanceof Register && oprand.dataType == dataType) {
                 this.spillVar(varIndex, oprand, newInsts);
+                return oprand;
             }
         }
         //理论上，不会到达这里。
@@ -2026,15 +2028,28 @@ class Lower {
         let result = null;
         //1.从空余的寄存器中寻找一个。
         let allocatedRegisters = [];
-        this.loweredVars.forEach((oprand, varIndex) => {
-            //已经lower了的每个变量，都会锁定一个寄存器。
-            if (oprand.kind == OprandKind.register) {
+        for (let varIndex of this.loweredVars.keys()) {
+            let oprand = this.loweredVars.get(varIndex);
+            if (oprand instanceof Register) {
                 allocatedRegisters.push(oprand);
             }
-            else {
+            else if (oprand instanceof MemAddress) {
                 allocatedRegisters.push(this.spilledVars2Reg.get(varIndex));
             }
-        });
+            else {
+                console.log("Unknown oprand in getFreeRegister:");
+                console.log(oprand);
+            }
+        }
+        // this.loweredVars.forEach((oprand,varIndex)=>{
+        //     //已经lower了的每个变量，都会锁定一个寄存器。
+        //     if(oprand.kind == OprandKind.register){
+        //         allocatedRegisters.push(oprand as Register);
+        //     }
+        //     else{
+        //         allocatedRegisters.push(this.spilledVars2Reg.get(varIndex) as Register);
+        //     }
+        //     });
         //确定寄存器池
         let regs = Register.getRegisters(dataType);
         for (let reg of regs) {

@@ -1760,6 +1760,8 @@ class AsmGenerator extends AstVisitor{
             this.canUseRedZone = bytes < 128;
         }
 
+        this.canUseRedZone = false;  //todo 暂时关闭使用RedZone,因为在28节处理字符串数组时遇到一点问题。
+
         //添加序曲
         //新增加一个BasicBlock
         let bb = new BasicBlock();
@@ -2238,7 +2240,7 @@ class AsmGenerator extends AstVisitor{
             else{ 
                 let reg = this.getFreeRegister(oprand.dataType, liveVars);
                 if (reg == null){
-                    reg = this.spillARegister(newInsts) as Register;
+                    reg = this.spillARegister(oprand.dataType, newInsts) as Register;
                 }
                 this.assignRegToVar(varIndex,reg);        
             }
@@ -2321,12 +2323,13 @@ class AsmGenerator extends AstVisitor{
     /**
      * 选一个寄存器，溢出出去。
      */
-    private spillARegister(newInsts:Inst[]):Register|null{
+    private spillARegister(dataType:CpuDataType, newInsts:Inst[]):Register|null{
           for (let varIndex of this.loweredVars.keys()){
             let oprand = this.loweredVars.get(varIndex) as Oprand;
             // if (oprand.kind == OprandKind.register && this.reservedRegisters.indexOf(oprand as Register)!=-1){
-            if (oprand.kind == OprandKind.register){
+            if (oprand instanceof Register && oprand.dataType == dataType){
                 this.spillVar(varIndex, oprand as Register, newInsts);
+                return oprand;
             }
         }
 
@@ -2361,15 +2364,30 @@ class AsmGenerator extends AstVisitor{
 
         //1.从空余的寄存器中寻找一个。
         let allocatedRegisters:Register[] = [];
-        this.loweredVars.forEach((oprand,varIndex)=>{
-            //已经lower了的每个变量，都会锁定一个寄存器。
-            if(oprand.kind == OprandKind.register){
+
+        for (let varIndex of this.loweredVars.keys()){
+            let oprand = this.loweredVars.get(varIndex);
+            if(oprand instanceof Register){
                 allocatedRegisters.push(oprand as Register);
             }
-            else{
+            else if (oprand instanceof MemAddress){
                 allocatedRegisters.push(this.spilledVars2Reg.get(varIndex) as Register);
             }
-            });
+            else{
+                console.log("Unknown oprand in getFreeRegister:");
+                console.log(oprand);
+            }
+        }
+
+        // this.loweredVars.forEach((oprand,varIndex)=>{
+        //     //已经lower了的每个变量，都会锁定一个寄存器。
+        //     if(oprand.kind == OprandKind.register){
+        //         allocatedRegisters.push(oprand as Register);
+        //     }
+        //     else{
+        //         allocatedRegisters.push(this.spilledVars2Reg.get(varIndex) as Register);
+        //     }
+        //     });
         
         //确定寄存器池
         let regs:Register[]=Register.getRegisters(dataType); 

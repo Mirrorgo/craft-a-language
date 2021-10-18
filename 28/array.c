@@ -24,11 +24,11 @@ PlayArray* sample_array_double(){
     //创建数组
     PlayArray * parr = array_create_by_length(3);
 
-    println_cs("In sample_array_double, addresses:");
-    println_l((long)parr);
-    println_l((long)PTR_ARRAY_ELEM(parr,0));
-    println_l((long)PTR_ARRAY_ELEM(parr,1));
-    println_l((long)PTR_ARRAY_ELEM(parr,2));
+    // println_cs("In sample_array_double, addresses:");
+    // println_l((long)parr);
+    // println_l((long)PTR_ARRAY_ELEM(parr,0));
+    // println_l((long)PTR_ARRAY_ELEM(parr,1));
+    // println_l((long)PTR_ARRAY_ELEM(parr,2));
 
     //给数据元素赋值
     *((double *)PTR_ARRAY_ELEM(parr,0)) = 5;
@@ -54,10 +54,10 @@ PlayArray* sample_array_string(){
  //创建数组
     PlayArray * parr = array_create_by_length(2);
 
-    println_cs("In sample_array_string, addresses:");
-    println_l((long)parr);
-    println_l((long)PTR_ARRAY_ELEM(parr,0));
-    println_l((long)PTR_ARRAY_ELEM(parr,1));
+    // println_cs("In sample_array_string, addresses:");
+    // println_l((long)parr);
+    // println_l((long)PTR_ARRAY_ELEM(parr,0));
+    // println_l((long)PTR_ARRAY_ELEM(parr,1));
 
     //给数据元素赋值
     *((PlayString **)PTR_ARRAY_ELEM(parr,0)) = string_create_by_cstr("Hello");
@@ -71,11 +71,14 @@ PlayString* concat_array_string(PlayArray * parr){
     PlayString* pstr;
 
     if (parr->length > 0)  pstr = *((PlayString**)PTR_ARRAY_ELEM(parr, 0));
+    PlayString* pstr1 = *((PlayString**)PTR_ARRAY_ELEM(parr, 0));
+    PlayString* pstr2 = *((PlayString**)PTR_ARRAY_ELEM(parr, 1));
+    pstr = string_concat(pstr1, pstr2);
 
-    for (int i = 1; i< parr->length; i++){
-        PlayString* pstr1 = *((PlayString**)PTR_ARRAY_ELEM(parr, i));
-        pstr = string_concat(pstr, pstr1);
-    }
+    // for (int i = 1; i< parr->length; i++){
+    //     PlayString* pstr1 = *((PlayString**)PTR_ARRAY_ELEM(parr, i));
+    //     pstr = string_concat(pstr, pstr1);
+    // }
 
     return pstr; 
 }

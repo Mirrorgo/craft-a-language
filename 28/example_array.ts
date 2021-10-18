@@ -1,34 +1,22 @@
-//先用这个简单的测试程序
+// 先用这个简单的测试程序
 let ages:number[] = [8.0, 18.0, 28];  //技术点：整型字面量28要作为浮点型看待
-ages[2] = 38;     //技术点：1.给数组元素赋值；2.整数下标
-
+ages[2] = 38;                         //技术点：1.给数组元素赋值；2.整数下标
 let sum:number = 0;
 for (let i:number = 0; i<3; i++){
-    sum = sum + ages[i];     //技术点:浮点数转整数，计算出ages的下标
+    sum = sum + ages[i];              //技术点:浮点数转整数，计算出ages的下标
     println(ages[i]);
 }
 println(sum);
 
 
-
-//下面的程序还在调试中。
-
 //字符串数组
-// let names:string[] = ["richard","sam", "john"];
-// names[1] = "julia";      //数组元素赋值，左值
-// println(names[1]);
-// for (let i = 0; i< 3; i++){
-//    println(names[i]);    //读取数组元素，右值
-// }
+let names:string[] = ["richard","sam", "john"];
+names[1] = "julia";                   //数组元素赋值，左值
+println(names[1]);
+for (let i:number = 0; i< 3; i++){
+   println(names[i]);                 //读取数组元素，右值
+}
 
-//number数组
-// let ages:number[] = [8, 18, 28];
-// ages[2] = 38;           //数组元素赋值，左值
-// let sum:number = 0;
-// for (let i = 0.0; i<3.0; i++){
-//     sum = sum + ages[i];//读取数组元素，右值
-// }
-// println(sum);
 
 // //二维数组
 // let a:number[][] = [[1,2,3],[4,5]];  //二维数组
