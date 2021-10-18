@@ -1439,6 +1439,7 @@ class AsmGenerator extends AstVisitor{
         args.push(new Oprand(OprandKind.immediate, literal.exps.length));
         let arrOprand = this.callIntrinsics("array_create_by_length",args);
 
+        let dataType = getCpuDataType((literal.theType as ArrayType).baseType);
         if (arrOprand.kind == OprandKind.varIndex){
             let insts = this.getCurrentBB().insts;
             //求每个元素的值，并设置到数组
@@ -1451,7 +1452,6 @@ class AsmGenerator extends AstVisitor{
                     insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.double), src, tempVar));
                     src = tempVar;
                 }
-                let dataType = getCpuDataType(exp.theType as Type);
                 let offset = this.OBJECT_HEADER_SIZE + i*8;
                 let dest = new LogicalMemAddress(arrOprand.value as number, offset);
                 insts.push(new Inst_2(OpCodeUtil.movOp(dataType), src, dest));
