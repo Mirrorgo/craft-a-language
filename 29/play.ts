@@ -7,7 +7,7 @@ import {TokenKind, Scanner, CharStream, Op} from './scanner';
 import {AstVisitor, AstNode, Block, Prog, VariableDecl, FunctionDecl, FunctionCall, Statement, Expression, ExpressionStatement, Binary, Unary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, ForStatement, AstDumper, IndexedExp, TypeOfExp, DotExp, ThisExp} from './ast';
 import {Parser} from './parser';
 import {SemanticAnalyer} from './semantic';
-import {Symbol, SymKind, VarSymbol, FUN_println, FunctionKind} from './symbol';
+import {Symbol, SymKind, VarSymbol, FUN_println, FunctionKind, ClassSymbol} from './symbol';
 import {Scope, ScopeDumper} from './scope';
 import {BCModule, BCGenerator, VM, BCModuleDumper, BCModuleReader, BCModuleWriter} from './vm'
 import {compileToAsm} from './asm_x86-64'
@@ -144,7 +144,7 @@ class Intepretor extends AstVisitor{
      * 原理：根据函数定义，执行其函数体。
      * @param functionCall 
      */
-    visitFunctionCall(functionCall:FunctionCall, objRef:any):any{
+    visitFunctionCall(functionCall:FunctionCall, obj:any):any{
         // console.log("running funciton:" + functionCall.name);
         if (functionCall.name == "println"){ //内置函数
             return this.println(functionCall.arguments);
@@ -175,12 +175,12 @@ class Intepretor extends AstVisitor{
             }
 
             //如果是对象的方法，那要往栈桢里设置一个特殊的this变量
-            let newObject:Map<Symbol,any>|null = null;
+            let newObject:PlayObject|null = null;
             if(functionCall.sym.functionKind == FunctionKind.Constructor){
                 let topScope = this.getRootNode(functionCall).scope as Scope;
                 let classSym = topScope.getSymbol(functionCall.name);
-                if (classSym){
-                    newObject = new Map();
+                if (classSym && classSym instanceof ClassSymbol){
+                    newObject = new PlayObject(classSym);
                     frame.values.set(classSym, newObject);
                 }
                 else{
@@ -188,18 +188,8 @@ class Intepretor extends AstVisitor{
                 }
             }
             else if (functionCall.sym.functionKind == FunctionKind.Method){
-                if (objRef){
-                    let topScope = this.getRootNode(functionCall).scope as Scope;
-                    let classSym = topScope.getSymbol(functionCall.name);
-                    if (classSym){
-                        frame.values.set(classSym, objRef);
-                        console.log("in Interpretor.visitFunctionCall:");
-                        console.log("method call!!");
-                        console.log(frame.values);
-                    }
-                    else{
-                        console.log("Runtime error: cannot find class symbol for method invoke.");
-                    }
+                if (obj && obj instanceof PlayObject){
+                    frame.values.set(obj.classSym, obj);
                 }
                 else{
                     console.log("Runtime error: method invode need an object reference.");
@@ -297,13 +287,18 @@ class Intepretor extends AstVisitor{
     }
 
     visitDotExp(dotExp:DotExp):any{
-        let object = this.visit(dotExp.baseExp) as Map<Symbol,any>;
+        let object = this.visit(dotExp.baseExp);
+        if (!(object instanceof PlayObject)){
+            console.log("Runtime error: left side of dotExp should return a PlayObject.");
+            return;
+        }
+
         if (dotExp.property instanceof Variable){
             if (dotExp.isLeftValue){
                 return new ObjectPropertyRef(object, dotExp.property.sym as Symbol);
             }
             else{
-                return object.get(dotExp.property.sym as Symbol);
+                return object.data.get(dotExp.property.sym as Symbol);
             }
         }
         else{//functionCall
@@ -339,7 +334,7 @@ class Intepretor extends AstVisitor{
     }
 
     private setObjectPropertyValue(ref:ObjectPropertyRef, value:any):any{
-        ref.object.set(ref.prop, value);
+        ref.object.data.set(ref.prop, value);
     }
 
     visitBinary(bi:Binary):any{
@@ -494,11 +489,20 @@ class ArrayElementAddress{
     }
 }
 
+//存储一个对象的数据
+class PlayObject{
+    classSym:ClassSymbol;
+    data:Map<Symbol,any> = new Map();
+    constructor(classSym:ClassSymbol){
+        this.classSym = classSym;
+    }
+}
+
 //左值，对象属性的引用
 class ObjectPropertyRef{
-    object: Map<Symbol,any>;
+    object: PlayObject;
     prop:Symbol;
-    constructor(object:Map<Symbol,any>, prop:Symbol){
+    constructor(object:PlayObject, prop:Symbol){
         this.object = object;
         this.prop = prop;
     }

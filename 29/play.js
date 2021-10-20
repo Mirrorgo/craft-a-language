@@ -143,7 +143,7 @@ class Intepretor extends ast_1.AstVisitor {
      * 原理：根据函数定义，执行其函数体。
      * @param functionCall
      */
-    visitFunctionCall(functionCall, objRef) {
+    visitFunctionCall(functionCall, obj) {
         // console.log("running funciton:" + functionCall.name);
         if (functionCall.name == "println") { //内置函数
             return this.println(functionCall.arguments);
@@ -174,8 +174,8 @@ class Intepretor extends ast_1.AstVisitor {
             if (functionCall.sym.functionKind == symbol_1.FunctionKind.Constructor) {
                 let topScope = this.getRootNode(functionCall).scope;
                 let classSym = topScope.getSymbol(functionCall.name);
-                if (classSym) {
-                    newObject = new Map();
+                if (classSym && classSym instanceof symbol_1.ClassSymbol) {
+                    newObject = new PlayObject(classSym);
                     frame.values.set(classSym, newObject);
                 }
                 else {
@@ -183,18 +183,8 @@ class Intepretor extends ast_1.AstVisitor {
                 }
             }
             else if (functionCall.sym.functionKind == symbol_1.FunctionKind.Method) {
-                if (objRef) {
-                    let topScope = this.getRootNode(functionCall).scope;
-                    let classSym = topScope.getSymbol(functionCall.name);
-                    if (classSym) {
-                        frame.values.set(classSym, objRef);
-                        console.log("in Interpretor.visitFunctionCall:");
-                        console.log("method call!!");
-                        console.log(frame.values);
-                    }
-                    else {
-                        console.log("Runtime error: cannot find class symbol for method invoke.");
-                    }
+                if (obj && obj instanceof PlayObject) {
+                    frame.values.set(obj.classSym, obj);
                 }
                 else {
                     console.log("Runtime error: method invode need an object reference.");
@@ -282,12 +272,16 @@ class Intepretor extends ast_1.AstVisitor {
     }
     visitDotExp(dotExp) {
         let object = this.visit(dotExp.baseExp);
+        if (!(object instanceof PlayObject)) {
+            console.log("Runtime error: left side of dotExp should return a PlayObject.");
+            return;
+        }
         if (dotExp.property instanceof ast_1.Variable) {
             if (dotExp.isLeftValue) {
                 return new ObjectPropertyRef(object, dotExp.property.sym);
             }
             else {
-                return object.get(dotExp.property.sym);
+                return object.data.get(dotExp.property.sym);
             }
         }
         else { //functionCall
@@ -316,7 +310,7 @@ class Intepretor extends ast_1.AstVisitor {
         return lastArr.splice(index, 1, value);
     }
     setObjectPropertyValue(ref, value) {
-        ref.object.set(ref.prop, value);
+        ref.object.data.set(ref.prop, value);
     }
     visitBinary(bi) {
         // console.log("visitBinary:" + bi.op);
@@ -456,6 +450,13 @@ class ArrayElementAddress {
     constructor(varSym, indices) {
         this.varSym = varSym;
         this.indices = indices;
+    }
+}
+//存储一个对象的数据
+class PlayObject {
+    constructor(classSym) {
+        this.data = new Map();
+        this.classSym = classSym;
     }
 }
 //左值，对象属性的引用

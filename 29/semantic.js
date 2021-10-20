@@ -538,10 +538,10 @@ class LeftValueAttributor extends SemanticAstVisitor {
     }
     visitDotExp(exp, shouldBeLeftValue = undefined) {
         this.visit(exp.property, shouldBeLeftValue);
-        this.visit(exp.baseExp, shouldBeLeftValue); //要求基础类型必须是左值。对于a[i][j]这样的多维数组，会导致a[i]、a都标记为左值。
+        this.visit(exp.baseExp);
         if (shouldBeLeftValue) {
-            //只有基础类型和Property是左值的情况下，这里才能是左值。比如foo()[i]就不可以作为左值，因为foo()不能作为左值。
-            if (exp.baseExp.isLeftValue && exp.property.isLeftValue) {
+            //只有Property是左值的情况下，这里才能是左值。比如foo()[i]就不可以作为左值，因为foo()不能作为左值。
+            if (exp.property.isLeftValue) {
                 exp.isLeftValue = true;
             }
             else {
