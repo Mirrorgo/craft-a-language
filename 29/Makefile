@@ -121,6 +121,20 @@ array : rt_objs
 	@echo "为$@.c生成可执行文件$@..."
 	gcc -o $@ $@.c rt/*.o 
 
+example_class : rt_objs
+	@echo "为$@.ts生成汇编代码文件$@.s..."
+	$(shell node play --dumpAsm $@.ts > /dev/null)
+
+	@echo "为$@.ts生成可执行文件$@..."
+	gcc -o $@ $@.s rt/*.o
+
+class : rt_objs
+	@echo "为$@.c生成汇编代码文件$@.s..."
+	gcc -S $@.c -o $@.s -O2
+	
+	@echo "为$@.c生成可执行文件$@..."
+	gcc -o $@ $@.c rt/*.o 
+
 foo : rt_objs
 	@echo "为$@.s生成可执行文件$@..."
 	gcc -o $@ $@.s rt/*.o

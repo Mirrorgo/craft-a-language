@@ -12,7 +12,7 @@
 #define PTR_OBJ_DATA(pobj) (void *)((size_t)pobj + sizeof(Object)))
 
 //获取对象某个属性的地址
-#define PTR_OBJ_PROP(pobj, index) (void *)(((size_t)pobj + sizeof(Object) + sizeof(double)*index)
+#define PTR_OBJ_PROP(pobj, index) (void *)((size_t)pobj + sizeof(Object) + sizeof(double)*index)
 
 typedef struct _PlayObject{
     Object object;

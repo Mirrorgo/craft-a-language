@@ -15,9 +15,10 @@ int main(){
     PlayString* color = string_create_by_cstr("white");
 
     *((PlayString **)PTR_OBJ_PROP(mammal,0)) = color;
-    *((double *)PTR_OBJ_PROP(mammal,0)) = 10;
+    *((double *)PTR_OBJ_PROP(mammal,1)) = 10;
 
-    
+    println_s(*((PlayString **)PTR_OBJ_PROP(mammal,0)));
+    println_d(*((double *)PTR_OBJ_PROP(mammal,1)));
 }
 
 
