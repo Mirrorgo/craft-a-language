@@ -135,6 +135,20 @@ class : rt_objs
 	@echo "为$@.c生成可执行文件$@..."
 	gcc -o $@ $@.c rt/*.o 
 
+example_fp : rt_objs
+	@echo "为$@.ts生成汇编代码文件$@.s..."
+	$(shell node play --dumpAsm $@.ts > /dev/null)
+
+	@echo "为$@.ts生成可执行文件$@..."
+	gcc -o $@ $@.s rt/*.o
+
+fp : rt_objs
+	@echo "为$@.c生成汇编代码文件$@.s..."
+	gcc -S $@.c -o $@.s -O2
+	
+	@echo "为$@.c生成可执行文件$@..."
+	gcc -o $@ $@.c rt/*.o 
+
 foo : rt_objs
 	@echo "为$@.s生成可执行文件$@..."
 	gcc -o $@ $@.s rt/*.o
@@ -157,4 +171,4 @@ playvm : rt_objs
 .PHONY : clean
 clean : 
 	@echo "删除rt/*.o example_fibo example playvm..."
-	@-rm -fr rt/*.o example_fibo fibo foo example playvm example_for for example_if example_str str example_array array example_tail tail example_assign assign example_fact fact example_param param example_reg example_unary unary
+	@-rm -fr rt/*.o example_fibo fibo foo example playvm example_for for example_if example_str str example_array array example_tail tail example_assign assign example_fact fact example_param param example_reg example_unary unary class
