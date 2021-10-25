@@ -12,9 +12,9 @@
  * 
  * 当前语法规则：
  * prog : statementList? EOF;
- * statementList : (variableDecl | functionDecl | expressionStatement)+ ;
+ * statementList : statement+ ;
  * statement: block | expressionStatement | returnStatement | ifStatement | forStatement 
- *          | emptyStatement | functionDecl | variableDecl ;
+ *          | emptyStatement | functionDecl | variableDecl | classDecl;
  * block : '{' statementList? '}' ;
  * ifStatement : 'if' '(' expression ')' statement ('else' statement)? ;
  * forStatement : 'for' '(' (expression | 'let' variableDecl)? ';' expression? ';' expression? ')' statement ;
@@ -32,12 +32,12 @@
  * returnStatement: 'return' expression? ';' ;
  * emptyStatement: ';' ;
  * expressionStatement: expression ';' ;
- * expression: 'typeof' expression | assignment ; 
+ * expression: assignment ; 
  * assignment: binary (assignmentOp binary)* ;
  * binary: unary (binOp unary)* ;
  * unary: primary | prefixOp unary | primary postfixOp ;
- * primary:  primaryLeft ('[' expression ']')* ;
- * primaryLeft: Identifier | functionCall | '(' expression ')' | arrayLiteral | literal;
+ * primary:  primaryLeft ('[' expression ']') | '.' expression)* ;
+ * primaryLeft: Identifier | functionCall |constructorCall | '(' expression ')' | arrayLiteral | literal | 'typeof' expression;
  * literal: StringLiteral | DecimalLiteral | IntegerLiteral | BooleanLiteral | NullLiteral ;
  * assignmentOp : '=' | '+=' | '-=' | '*=' | '/=' | '>>=' | '<<=' | '>>>=' | '^=' | '|=' ;
  * binOp: '+' | '-' | '*' | '/' | '==' | '!=' | '<=' | '>=' | '<'
@@ -49,47 +49,16 @@
  * arrayLiteral : ('[' elementList? ']');
  * elementList : arrayElement (','+ arrayElement)* ;
  * arrayElement : expression ','? ;
+ * classDecl : Class Identifier classTail ;
+ * classTail :  '{' classElement* '}' ;
+ * classElement : constructorDecl | propertyMemberDecl ;
+ * constructorDecl : Constructor '(' parameterList? ')' '{' functionBody '}' ;
+ * propertyMemberDecl : Identifier typeAnnotation? ('=' expression)? ';'                  
+ *                     | Identifier callSignature  '{' functionBody '}' ;
+ * constructorCall : New Identifier (' argumentList? ')' ;
  * 
  */
 
- /*
-添加与类型有关的一些语法规则。
-来源：从Antlr中拷贝过来，并加以修改。
-type_
-    : unionOrIntersectionOrPrimaryType
-    | functionType
-    | constructorType
-    | typeGeneric
-    | StringLiteral
-    ;
-
-unionOrIntersectionOrPrimaryType
-    : unionOrIntersectionOrPrimaryType '|' unionOrIntersectionOrPrimaryType #Union
-    | unionOrIntersectionOrPrimaryType '&' unionOrIntersectionOrPrimaryType #Intersection
-    | primaryType #Primary
-    ;
-
-primaryType
-    : '(' type_ ')'                                 #ParenthesizedPrimType
-    | predefinedType                                #PredefinedPrimType
-    | typeReference                                 #ReferencePrimType
-    | objectType                                    #ObjectPrimType
-    | primaryType {notLineTerminator()}? '[' ']'    #ArrayPrimType
-    | '[' tupleElementTypes ']'                     #TuplePrimType
-    | typeQuery                                     #QueryPrimType
-    | This                                          #ThisPrimType
-    | typeReference Is primaryType                  #RedefinitionOfType
-    ;
-
-predefinedType
-    : Any
-    | Number
-    | Boolean
-    | String
-    | Symbol
-    | Void
-    ;
- */
 
 import {Token, TokenKind, Scanner, Op, Seperator, Keyword, Position, Operators} from './scanner';
 import {AstVisitor, AstNode, Block, Prog, VariableStatement, VariableDecl, FunctionDecl, CallSignature, ParameterList ,FunctionCall, Statement, Expression, ExpressionStatement, Binary, Unary, IntegerLiteral, DecimalLiteral, StringLiteral, NullLiteral, BooleanLiteral, Literal, Variable, ReturnStatement, IfStatement, ForStatement, TypeExp, PrimTypeExp, PredefinedTypeExp, LiteralTypeExp, TypeReferenceExp, ParenthesizedPrimTypeExp, ArrayPrimTypeExp, IndexedExp, UnionOrIntersectionTypeExp, ErrorExp, ErrorStmt, TypeOfExp, ArrayLiteral, EmptyStatement} from './ast';
