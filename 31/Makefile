@@ -185,4 +185,4 @@ playvm : rt_objs
 .PHONY : clean
 clean : 
 	@echo "删除rt/*.o example_fibo example playvm..."
-	@-rm -fr rt/*.o example_fibo fibo foo example playvm example_for for example_if example_str str example_array array example_tail tail example_assign assign example_fact fact example_param param example_reg example_unary unary class class2 fp
+	@-rm -fr rt/*.o example_fibo fibo foo example playvm example_for for example_if example_str str example_array array example_tail tail example_assign assign example_fact fact example_param param example_reg example_unary unary class example_class class2 example_class2 fp

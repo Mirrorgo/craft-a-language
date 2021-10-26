@@ -51,6 +51,21 @@ export class FunctionSymbol extends Symbol{
 
     classSym:ClassSymbol|null = null;  //当FunctionSymbol是类的方法时，设置所关联的类。
 
+    //是否是方法
+    get isMethod():boolean{
+        return this.classSym != null;
+    }
+
+    //获取全名称，也就是“类名.方法名”
+    get fullName():string{
+        let str = "";
+        if(this.classSym){
+            str += this.classSym.name+".";
+        }
+        str += this.name;
+        return str;
+    }
+
     constructor(name: string, theType:FunctionType, vars:VarSymbol[] = [], functionKind:FunctionKind=FunctionKind.Function){
         super(name,theType, SymKind.Function);
         this.vars = vars;
@@ -218,7 +233,7 @@ export let FUN_integer_to_string = new FunctionSymbol("integer_to_string", new F
 //     // ["string_concat", FUN_string_concat],
 // ]);
 
-let FUN_string_create_by_str = new FunctionSymbol("string_create_by_str", new FunctionType(SysTypes.String,[SysTypes.String]),[new VarSymbol("a", SysTypes.String)]);
+let FUN_string_create_by_str = new FunctionSymbol("string_create_by_cstr", new FunctionType(SysTypes.String,[SysTypes.String]),[new VarSymbol("a", SysTypes.String)]);
 let FUN_string_concat = new FunctionSymbol("string_concat", new FunctionType(SysTypes.String,[SysTypes.String,SysTypes.String]),[new VarSymbol("str1", SysTypes.String), new VarSymbol("str2", SysTypes.String)]);
 let FUN_array_create_by_length = new FunctionSymbol("array_create_by_length", new FunctionType(SysTypes.Object,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
 let FUN_object_create_by_length = new FunctionSymbol("object_create_by_length", new FunctionType(SysTypes.Object,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
