@@ -43,7 +43,7 @@ class FunctionSymbol extends Symbol {
         this.functionKind = functionKind;
     }
     //是否是方法
-    get isMethod() {
+    get isMethodOrConstructor() {
         return this.classSym != null;
     }
     //获取全名称，也就是“类名.方法名”
@@ -110,10 +110,18 @@ class ClassSymbol extends Symbol {
         visitor.visitClassSymbol(this, additional);
     }
     //计算总的属性的数量，包括自身的属性数和各级父类的属性数。
-    getNumTotalProps() {
+    get numTotalProps() {
         let num = this.props.length;
         if (this.superClassSym) {
-            num += this.superClassSym.getNumTotalProps(); //递归查找
+            num += this.superClassSym.numTotalProps; //递归查找
+        }
+        return num;
+    }
+    //计算总的属性的数量，包括自身的属性数和各级父类的属性数。
+    get numTotalMethods() {
+        let num = this.methods.length;
+        if (this.superClassSym) {
+            num += this.superClassSym.numTotalMethods; //递归查找
         }
         return num;
     }
@@ -126,7 +134,27 @@ class ClassSymbol extends Symbol {
         }
         else {
             if (this.superClassSym)
-                index += this.superClassSym.getNumTotalProps();
+                index += this.superClassSym.numTotalProps;
+        }
+        return index;
+    }
+    //返回某个方法在总的方法中的序号，用于计算在vtable中的偏移量
+    //考虑了方法覆盖的情况
+    getMethodIndex(methodName) {
+        let index = -1;
+        for (let i = 0; i < this.methods.length; i++) {
+            if (this.methods[i].name == methodName) {
+                index = i;
+                break;
+            }
+        }
+        if (index == -1) {
+            if (this.superClassSym)
+                index = this.superClassSym.getMethodIndex(methodName);
+        }
+        else {
+            if (this.superClassSym)
+                index += this.superClassSym.numTotalMethods;
         }
         return index;
     }
@@ -209,6 +237,7 @@ let FUN_string_create_by_str = new FunctionSymbol("string_create_by_cstr", new t
 let FUN_string_concat = new FunctionSymbol("string_concat", new types_1.FunctionType(types_1.SysTypes.String, [types_1.SysTypes.String, types_1.SysTypes.String]), [new VarSymbol("str1", types_1.SysTypes.String), new VarSymbol("str2", types_1.SysTypes.String)]);
 let FUN_array_create_by_length = new FunctionSymbol("array_create_by_length", new types_1.FunctionType(types_1.SysTypes.Object, [types_1.SysTypes.Integer]), [new VarSymbol("a", types_1.SysTypes.Integer)]);
 let FUN_object_create_by_length = new FunctionSymbol("object_create_by_length", new types_1.FunctionType(types_1.SysTypes.Object, [types_1.SysTypes.Integer]), [new VarSymbol("a", types_1.SysTypes.Integer)]);
+let FUN_double_to_string = new FunctionSymbol("double_to_string", new types_1.FunctionType(types_1.SysTypes.Object, [types_1.SysTypes.Number]), [new VarSymbol("a", types_1.SysTypes.Number)]);
 exports.built_ins = new Map([
     ["println", exports.FUN_println],
     ["println_l", exports.FUN_println_l],
@@ -221,6 +250,7 @@ exports.built_ins = new Map([
     ["string_concat", FUN_string_concat],
     ["array_create_by_length", FUN_array_create_by_length],
     ["object_create_by_length", FUN_object_create_by_length],
+    ["double_to_string", FUN_double_to_string],
 ]);
 ///////////////////////////////////////////////////////////////////////
 //visitor

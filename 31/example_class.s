@@ -76,7 +76,23 @@ _main:
     callq	_println_s
     movq	-24(%rbp), %rsi			#  reload	var2
     movsd	16(%rsi), %xmm0
+    movq	%rsi, -24(%rbp)			#  spill	var2
     callq	_println_d
+    movq	-24(%rbp), %rsi			#  reload	var2
+    leaq	L_.str.2(%rip), %rdx		#  leaq	stringConst(2), var6(temp):int64
+    movq	%rdx, %rdi
+    movq	%rsi, -24(%rbp)			#  spill	var2
+    callq	_string_create_by_cstr
+    movq	%rax, %rcx				#  movq	%rax, var7(temp):int64
+    movq	-24(%rbp), %rsi			#  reload	var2
+    movq	%rcx, %r8				#  movq	var7(temp):int64, var8(temp):int64
+    movq	%r8, 24(%rsi)				#  movq	var8(temp):int64, 24(var2)
+    movq	24(%rsi), %rdi
+    movq	%rsi, -24(%rbp)			#  spill	var2
+    callq	_println_s
+    movq	-24(%rbp), %rsi			#  reload	var2
+    movq	%rsi, %rdi
+    callq	_Mammal.speak
     addq	$32, %rsp
     popq	%rbp
     retq
@@ -87,3 +103,5 @@ L_.str:
 	.asciz	"Hello, my color is:"
 L_.str.1:
 	.asciz	"white"
+L_.str.2:
+	.asciz	"yellow"

@@ -22,12 +22,13 @@
  * variableStatement : 'let' variableDecl ';';
  * variableDecl : (Identifier|arrayLiteral) typeAnnotation？ ('=' expression)? ;
  * typeAnnotation : ':' type_;
- * type_ : unionOrIntersectionOrPrimaryType ;
+ * type_ : unionOrIntersectionOrPrimaryType | functionType;
  * unionOrIntersectionOrPrimaryType : primaryType ('|' | '&' primaryType)* ;
  * primaryType : primaryTypeLeft ('[' ']') * ;
  * primaryTypeLeft : predefinedType | literal | typeReference | '(' type_ ')' ;
  * predefinedType : 'number' | 'string' | 'boolean' | 'any' | 'void';
  * typeReference : Identifier ;
+ * functionType : '(' parameterList? ')' '=>' type_;
  * functionDecl: "function" Identifier callSignature  block ;
  * callSignature: '(' parameterList? ')' typeAnnotation? ;
  * returnStatement: 'return' expression? ';' ;
@@ -422,16 +423,57 @@ class Parser {
     }
     /**
      * 解析类型。
-     * 目前通过这个函数可以解析两种类型：Union类型和Primary类型
-     * typeAnnotation : ':' type_;
-     * type_ : unionOrIntersectionOrPrimaryType ;
-     * unionOrIntersectionOrPrimaryType : primaryType ('|' | '&' primaryType)* ;
-     * primaryType : predefinedType | literal | typeReference | primaryType '[' ']' | '(' type_ ')' ;
-     *
-     * typeReference : Identifier ;
      */
     parseType() {
-        return this.parseUnionOrIntersectionOrPrimaryType();
+        let t1 = this.scanner.peek();
+        let rtn;
+        if (t1.code == scanner_1.Seperator.OpenParen) {
+            let t2 = this.scanner.peek2();
+            if (t2.kind == scanner_1.TokenKind.Identifier) {
+                let t3 = this.scanner.peek3();
+                if (t3.code == scanner_1.Seperator.Colon) {
+                    rtn = this.parseFunctionType();
+                }
+                else {
+                    rtn = this.parseUnionOrIntersectionOrPrimaryType();
+                }
+            }
+            else {
+                rtn = this.parseUnionOrIntersectionOrPrimaryType();
+            }
+        }
+        else {
+            rtn = this.parseUnionOrIntersectionOrPrimaryType();
+        }
+        return rtn;
+    }
+    parseFunctionType() {
+        let beginPos = this.scanner.getNextPos();
+        this.scanner.next(); //跳过'('
+        let paramList = this.parseParameterList();
+        console.log("\nparamList");
+        console.log(paramList);
+        let t = this.scanner.peek();
+        if (t.code == scanner_1.Seperator.CloseParen) {
+            this.scanner.next(); //跳过‘)’
+        }
+        else {
+            this.skip();
+            this.addError("Expecting ')' when parsing FunctionType, while we got '" + t.text + "'.", t.pos);
+        }
+        let t1 = this.scanner.peek();
+        let returnType = null;
+        if (t1.code == scanner_1.Op.ARROW) { //'=>'
+            this.scanner.next(); //跳过'=>'
+            returnType = this.parseType();
+        }
+        else {
+            this.skip();
+            this.addError("Expecting '=>' when parsing FunctionType, while we got '" + t1.text + "'.", t1.pos);
+        }
+        if (!returnType)
+            returnType = new ast_1.TypeReferenceExp(beginPos, this.scanner.getLastPos(), t1.text, true); //一个用于占位的错误类型
+        return new ast_1.FunctionTypeExp(beginPos, this.scanner.getLastPos(), paramList, returnType);
     }
     /**
      * unionOrIntersectionOrPrimaryType : primaryType ('|' | '&' primaryType)* ;
@@ -497,7 +539,7 @@ class Parser {
         }
         else {
             this.addError("Unsupported type expression: " + t.text, t.pos);
-            primType = new ast_1.TypeReferenceExp(beginPos, this.scanner.getLastPos(), t.text, true);
+            primType = new ast_1.TypeReferenceExp(beginPos, this.scanner.getLastPos(), t.text, true); //一个用于占位的错误类型
             this.scanner.next();
         }
         //看看是不是数组类型。可以连续解析多个‘[]’

@@ -168,7 +168,7 @@ class OpCodeUtil{
     static muls:OpCode[] = [OpCode.mull, OpCode.imulq, OpCode.mulsd];
     static divs:OpCode[] = [OpCode.divl, OpCode.divq, OpCode.divsd];  //todo：长整型的div指令待定
     static movs:OpCode[] = [OpCode.movl, OpCode.movq, OpCode.movsd];  
-    static cmps:OpCode[] = [OpCode.cmpl, OpCode.cmpq, OpCode.ucomisd];
+    static cmps:OpCode[] = [OpCode.ucomisd, OpCode.ucomisd, OpCode.ucomisd]; //todo: 暂时都用ucomisd指令
     static jgs:OpCode[] = [OpCode.jg, OpCode.jg, OpCode.ja];
     static jges:OpCode[] = [OpCode.jge, OpCode.jge, OpCode.jae];
     static jls:OpCode[] = [OpCode.jl, OpCode.jl, OpCode.jb];
@@ -340,6 +340,10 @@ class VarOprand extends Oprand{
         this.varName = varName;
     }
 
+    get varIndex():number{
+        return this.value as number;
+    }
+
     toString():string{
         return "var"+this.value + "(" + this.varName + "):" + CpuDataType[this.dataType];
     }
@@ -347,9 +351,11 @@ class VarOprand extends Oprand{
 
 class FunctionOprand extends Oprand{
     args:Oprand[];
-    constructor(functionSym:FunctionSymbol, args:Oprand[]){
+    functionAddress:MemAddress|null;   //一般是一个MemAddress
+    constructor(functionSym:FunctionSymbol, args:Oprand[], functionAddress:MemAddress|null = null){
         super(OprandKind.function, functionSym);
         this.args = args;
+        this.functionAddress = functionAddress;
     }
 
     get functionSym():FunctionSymbol{
@@ -372,6 +378,11 @@ class FunctionOprand extends Oprand{
             else 
                 strArgs += ")";
         }
+
+        if(this.functionAddress){
+            return "*"+this.functionAddress.toString();
+        }
+
         return "_"+this.functionSym.fullName + strArgs;
     }
 }
@@ -394,14 +405,15 @@ class CmpOprand extends Oprand{
  * 这是个简化的版本，只支持基于寄存器的偏移量
  * 后面根据需要再扩展。
  */
+
 class MemAddress extends Oprand{
-    register:Register;
+    base:VarOprand|Register;  //一开始是一个VarOprand，后来会Lower成一个Register
     offset:number;
     index:number;
     bytes:1|2|4|8|undefined;
-    constructor(register:Register, offset:number, index: number = 0, bytes:1|2|4|8|undefined = undefined){
+    constructor(oprand:Register|VarOprand, offset:number, index: number = 0, bytes:1|2|4|8|undefined = undefined){
         super(OprandKind.memory,'undefined')
-        this.register = register;
+        this.base = oprand;
         this.offset = offset;
         this.index = index;
         this.bytes = bytes;
@@ -410,38 +422,59 @@ class MemAddress extends Oprand{
         //输出结果类似于：8(%rbp)
         //如果offset为0，那么不显示，即：(%rbp)
         return (this.offset == 0 ? "" : this.offset) + "("
-                + this.register.toString()
+                + this.base.toString()
                 + (this.index > 0 ? "," + this.index : "")
                 + (this.index > 0 && this.bytes ? "," + this.bytes : "")
                 + ")";
     }
 }
 
-/**
- * 逻辑上的内存寻址模式，可以Lower成为MemAddress
- */
-class LogicalMemAddress extends Oprand{
-    varIndex:number;  //相对于哪个变量（后面会Lower成寄存器）做偏移
-    offset:number;    //偏移量
-    index:number;     //数组下标
-    bytes:1|2|4|8|undefined;
-    constructor(varIndex:number, offset:number, index: number = 0, bytes:1|2|4|8|undefined = undefined){
-        super(OprandKind.logicalMemory,'undefined')
-        this.varIndex = varIndex;
-        this.offset = offset;
-        this.index = index;
-        this.bytes = bytes;
-    }
-    toString():string{
-        //输出结果类似于：8(%rbp)
-        //如果offset为0，那么不显示，即：(%rbp)
-        return (this.offset == 0 ? "" : this.offset) + "("
-                + "var"+this.varIndex.toString()
-                + (this.index > 0 ? ", " + this.index : "")
-                + (this.index > 0 && this.bytes ? ", " + this.bytes : "")
-                + ")";
-    }
-}
+// class MemAddress extends Oprand{
+//     // register:Register;
+//     offset:number;
+//     index:number;
+//     bytes:1|2|4|8|undefined;
+//     constructor(register:Register, offset:number, index: number = 0, bytes:1|2|4|8|undefined = undefined){
+//         super(OprandKind.memory,'undefined')
+//         this.register = register;
+//         this.offset = offset;
+//         this.index = index;
+//         this.bytes = bytes;
+//     }
+//     toString():string{
+//         //输出结果类似于：8(%rbp)
+//         //如果offset为0，那么不显示，即：(%rbp)
+//         return (this.offset == 0 ? "" : this.offset) + "("
+//                 + this.register.toString()
+//                 + (this.index > 0 ? "," + this.index : "")
+//                 + (this.index > 0 && this.bytes ? "," + this.bytes : "")
+//                 + ")";
+//     }
+// }
+
+// /**
+//  * 逻辑上的内存寻址模式，可以Lower成为MemAddress
+//  */
+// class LogicalMemAddress extends Oprand{
+//     varIndex:number;  //相对于哪个变量（后面会Lower成寄存器）做偏移
+//     offset:number;    //偏移量
+//     index:number;     //数组下标
+//     bytes:1|2|4|8|undefined;
+//     constructor(varIndex:number, offset:number, index: number = 0, bytes:1|2|4|8|undefined = undefined){
+//         super(OprandKind.logicalMemory,'undefined')
+//         this.varIndex = varIndex;
+//         this.offset = offset;
+//         this.index = index;
+//         this.bytes = bytes;
+//     }
+//     toString():string{
+//         return (this.offset == 0 ? "" : this.offset) + "("
+//                 + "var"+this.varIndex.toString()
+//                 + (this.index > 0 ? ", " + this.index : "")
+//                 + (this.index > 0 && this.bytes ? ", " + this.bytes : "")
+//                 + ")";
+//     }
+// }
 
 
 /**
@@ -1068,7 +1101,7 @@ class AsmGenerator extends AstVisitor{
                     this.getCurrentBB().insts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb,this.s.bbs[0]),"Tail Recursive Optimazation"));
                 }
                 else if (this.tailAnalysisResult.tailCalls.indexOf(rtnStmt.exp as FunctionCall) !=-1){
-                    let functionName = (rtnStmt.exp as FunctionCall).sym?.fullName;
+                    let functionName = ((rtnStmt.exp as FunctionCall).sym as FunctionSymbol).fullName;
                     this.getCurrentBB().insts.push(new Inst_1(OpCode.tailCallJmp, new Oprand(OprandKind.label,"_"+functionName),"Tail Call Optimazation"));
                 }
             }
@@ -1249,6 +1282,12 @@ class AsmGenerator extends AstVisitor{
         switch(bi.op){
             case Op.Plus: //'+'
                 if (bi.theType === SysTypes.String){ //字符串加
+                    if(TypeUtil.LE(bi.exp1.theType as Type, SysTypes.Number)){
+                        left = this.callBuiltIns("double_to_string", [left]);
+                    }
+                    if(TypeUtil.LE(bi.exp2.theType as Type, SysTypes.Number)){
+                        right = this.callBuiltIns("double_to_string", [right]);
+                    }
                     let args:Oprand[] = [];
                     args.push(left);
                     args.push(right);
@@ -1304,6 +1343,10 @@ class AsmGenerator extends AstVisitor{
 
         return dest;
     }
+
+    // private double_to_string(num:Oprand){
+    //     let functionOprand = new FunctionOprand()
+    // }
 
     private getOpsiteOp(op:Op):Op{
         let newOp:Op = op;
@@ -1491,7 +1534,7 @@ class AsmGenerator extends AstVisitor{
                     src = tempVar;
                 }
                 let offset = this.Array_Data_Offset + i*8;
-                let dest = new LogicalMemAddress(arrOprand.value as number, offset);
+                let dest = new MemAddress(arrOprand, offset);
                 insts.push(new Inst_2(OpCodeUtil.movOp(dataType), src, dest));
             }
         }
@@ -1531,7 +1574,7 @@ class AsmGenerator extends AstVisitor{
             let offset = this.Array_Data_Offset + index*8;
             
             //返回右值，也就是通过间接地址访问内存
-            rtn = new LogicalMemAddress(objInVar.value as number,offset);
+            rtn = new MemAddress(objInVar, offset);
         }
         else{ //下标不是立即数，那就加指令计算出元素地址来
             //先用乘法计算出地址偏移量offset
@@ -1562,7 +1605,7 @@ class AsmGenerator extends AstVisitor{
                 rtn = tempVar; 
             }
             else { //返回右值，也就是内存中的内容
-                rtn = new LogicalMemAddress(tempVar.value as number,0);
+                rtn = new MemAddress(tempVar, 0);
             }
         }
         
@@ -1605,7 +1648,6 @@ class AsmGenerator extends AstVisitor{
         //当前函数不是叶子函数
         this.asmModule?.isLeafFunction.set(this.s.functionSym as FunctionSymbol, false);
         
-
         let args:Oprand[] = [];
         for(let arg of functionCall.arguments){
             let oprand = this.visit(arg) as Oprand;
@@ -1618,39 +1660,46 @@ class AsmGenerator extends AstVisitor{
              functionSym = this.getBuiltInFunctionSym(functionCall.name,functionCall.arguments.length > 0 ? functionCall.arguments[0].theType as Type:null);
         }
 
-         //看看是不是尾递归或尾调用
-         let isTailCall = false;
-         let isTailRecursive = false;
-         if (this.tailAnalysisResult != null){
-             if (this.tailAnalysisResult.tailRecursives.indexOf(functionCall) != -1){
-                 isTailRecursive = true;
-             }
-             else if (this.tailAnalysisResult.tailCalls.indexOf(functionCall) != -1){
-                 isTailCall = true;
-             }
-         }
+        //看看是不是尾递归或尾调用
+        let isTailCall = false;
+        let isTailRecursive = false;
+        if (this.tailAnalysisResult != null){
+            if (this.tailAnalysisResult.tailRecursives.indexOf(functionCall) != -1){
+                isTailRecursive = true;
+            }
+            else if (this.tailAnalysisResult.tailCalls.indexOf(functionCall) != -1){
+                isTailCall = true;
+            }
+        }
 
-         return this.processFunctionCall(functionSym, args,isTailCall,isTailRecursive, obj);
+        return this.processFunctionCall(functionSym, args,isTailCall,isTailRecursive, obj);
     }
 
-    processFunctionCall(functionSym:FunctionSymbol, args:Oprand[], isTailCall:boolean, isTailRecursive:boolean, obj:any):any{
+    private processFunctionCall(functionSym:FunctionSymbol, args:Oprand[], isTailCall:boolean, isTailRecursive:boolean, obj:any):any{
         let insts = this.getCurrentBB().insts;
-
         let functionType = functionSym.theType as FunctionType;
 
+        let functionAddress:MemAddress|null = null;
+
         //调用Constructor
-        let newObject:Oprand|null = null;
+        let newObject:VarOprand|null = null;
         if (functionSym.functionKind == FunctionKind.Constructor){
             if(functionSym.name == "super"){
 
             }
             //创建新对象
             else{
-                let length = functionSym.classSym?.getNumTotalProps();
+                let length = functionSym.classSym?.numTotalProps;
                 let oprandLength = new Oprand(OprandKind.immediate, length);
-                newObject = this.callBuiltIns("object_create_by_length", [oprandLength]) as Oprand;
-                // insts.push(new Inst_1(OpCode.declVar,newObject));
-                assert(newObject instanceof VarOprand, "创建对象应该返回一个VarOprand");
+                newObject = this.callBuiltIns("object_create_by_length", [oprandLength]) as VarOprand;
+
+                //给对象头设置vtable的地址
+                let vtable = new Oprand(OprandKind.label, functionSym.classSym?.name + "_vtable@GOTPCREL(%rip)" ); //todo:理论上标签有重名的风险
+                let objHeader = new MemAddress(newObject, 0);
+                let tempVar = this.allocateTempVar(CpuDataType.int64);
+                insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), vtable, tempVar));
+                insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), tempVar, objHeader));
+
                 //把对象作为第一个参数传给构造方法
                 console.log("\n~~~@####newObject");
                 console.log(newObject);
@@ -1660,8 +1709,16 @@ class AsmGenerator extends AstVisitor{
         //对象方法
         //要把对象地址作为第一个参数传进去
         else if (functionSym.functionKind == FunctionKind.Method){
-            assert(obj instanceof Oprand, "方法调用缺少对象引用，FunctionCall: " + functionSym.name + "。");
+            assert(obj instanceof VarOprand, "方法调用缺少对象引用，FunctionCall: " + functionSym.name + "。");
             args.unshift(obj as Oprand);
+
+            //对于方法调用，通过vtable来获取函数地址
+            let classSym = functionSym.classSym as ClassSymbol;
+            let methodIndex = classSym.getMethodIndex(functionSym.name);
+            let vtableAddressInMem = new MemAddress(obj as VarOprand, 0);
+            let vtableAddress = this.allocateTempVar(CpuDataType.int64);
+            functionAddress = new MemAddress(vtableAddress, methodIndex * 8);
+            insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), vtableAddressInMem, vtableAddress)); 
         }
 
         //对于尾递归和尾调用，使用一个伪指令
@@ -1673,7 +1730,7 @@ class AsmGenerator extends AstVisitor{
             op = OpCode.tailCall;
         }
  
-        insts.push(new Inst_1(op, new FunctionOprand(functionSym, args)));
+        insts.push(new Inst_1(op, new FunctionOprand(functionSym, args, functionAddress)));
 
         //把返回值拷贝到一个临时变量，并返回这个临时变量
         //并且要重新装载溢出的变量        
@@ -1744,7 +1801,7 @@ class AsmGenerator extends AstVisitor{
             let offset = this.Object_Header_Size + propIndex *8;
 
             //返回间接内存寻址，不管左值还是右值
-            rtn = new LogicalMemAddress(object.value as number,offset); //object.value是变量下标
+            rtn = new MemAddress(object, offset); //object.value是变量下标
 
             // if (dotExp.isLeftValue)  
         }
@@ -2242,15 +2299,15 @@ class AsmGenerator extends AstVisitor{
         let regsSpilled : Register[] = []; 
         for (let j = 0; j < numArgs; j++){
             let paramIndex = j;
-            if (functionOprand.functionSym.isMethod) paramIndex-=1;
+            if (functionOprand.functionSym.isMethodOrConstructor) paramIndex-=1;
 
             let dataType:CpuDataType;
-            if (functionOprand.functionSym.isMethod && j == 0){
+            if (functionOprand.functionSym.isMethodOrConstructor && j == 0){
                 dataType = CpuDataType.int64; //对象地址
             }
             else{
                 dataType = getCpuDataType(functionOprand.functionType.paramTypes[paramIndex]);
-            } 
+            }
            
             let regDest:Register|null = null;
             if ((dataType == CpuDataType.int32 || dataType == CpuDataType.int64) && usedIntRegisters < this.MaxIntRegParams ){
@@ -2335,7 +2392,7 @@ class AsmGenerator extends AstVisitor{
 
             //函数调用的指令
             newInsts.push(inst_1);
-            
+        
             //锁定住返回值所需要的寄存器，不被占用，直到Lower ReturnSlot的时候
             if(functionOprand.functionType.returnType != SysTypes.Void){
 
@@ -2383,17 +2440,26 @@ class AsmGenerator extends AstVisitor{
             }
         }
         //逻辑的内存地址
-        else if(oprand instanceof LogicalMemAddress){ 
-            let base:Oprand|null|undefined = this.loweredVars.get(oprand.varIndex);
-            if (!(base instanceof Register)){
-                base = this.reloadVar(oprand.varIndex, newInsts);
-            }
+        else if(oprand instanceof MemAddress){ 
+            if(oprand.base instanceof VarOprand){
+                let varIndex = oprand.base.varIndex; 
+                let base:Oprand|null|undefined = this.loweredVars.get(varIndex);
+                if (!(base instanceof Register)){
+                    base = this.reloadVar(varIndex, newInsts);
+                }
 
-            if (base instanceof Register){
-                newOprand = new MemAddress(base, oprand.offset, oprand.index, oprand.bytes);
+                if (base instanceof Register){
+                    newOprand = new MemAddress(base, oprand.offset, oprand.index, oprand.bytes);
+                }
+                else{
+                    console.log("Error lowering LogicalMemAddress oprand: " + oprand.toString());
+                }
             }
-            else{
-                console.log("Error lowering LogicalMemAddress oprand: " + oprand.toString());
+        }
+        //把FunctionCall的functionAddress给Lower掉
+        else if (oprand instanceof FunctionOprand){
+            if(oprand.functionAddress){
+                oprand.functionAddress = this.lowerOprand(liveVars, oprand.functionAddress, newInsts) as MemAddress;
             }
         }
         //字符串字面量
@@ -2862,10 +2928,12 @@ class LivenessAnalyzer{
                 vars.push(varIndex);
             }
         }
-        else if (oprand instanceof LogicalMemAddress){
-            let varIndex = oprand.varIndex;
-            if (vars.indexOf(varIndex)== -1){
-                vars.push(varIndex);
+        else if (oprand instanceof MemAddress){
+            if (oprand.base instanceof VarOprand){
+                let varIndex = oprand.base.varIndex;
+                if (vars.indexOf(varIndex)== -1){
+                    vars.push(varIndex);
+                }
             }
         }
         else if (oprand instanceof FunctionOprand){

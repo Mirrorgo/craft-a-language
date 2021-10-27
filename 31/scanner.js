@@ -186,6 +186,14 @@ class Scanner {
         }
         return t;
     }
+    peek3() {
+        let t = this.tokens[2];
+        while (typeof t == 'undefined') {
+            this.tokens.push(this.getAToken());
+            t = this.tokens[2];
+        }
+        return t;
+    }
     //获取接下来的Token的位置
     getNextPos() {
         return this.peek().pos;

@@ -12,7 +12,7 @@
  * 
  */
 
-import {AstVisitor, AstNode, Block, Prog, Decl, VariableDecl, FunctionDecl, ParameterList, FunctionCall, Statement, Expression, ExpressionStatement, Binary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, ForStatement, Unary, CallSignature, BooleanLiteral, NullLiteral, VariableStatement, PredefinedTypeExp, ArrayPrimTypeExp, ParenthesizedPrimTypeExp, UnionOrIntersectionTypeExp, TypeReferenceExp, LiteralTypeExp, TypeOfExp, ArrayLiteral, IndexedExp, DotExp, ThisExp, ClassDecl} from './ast';
+import {AstVisitor, AstNode, Block, Prog, Decl, VariableDecl, FunctionDecl, ParameterList, FunctionCall, Statement, Expression, ExpressionStatement, Binary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, ForStatement, Unary, CallSignature, BooleanLiteral, NullLiteral, VariableStatement, PredefinedTypeExp, ArrayPrimTypeExp, ParenthesizedPrimTypeExp, UnionOrIntersectionTypeExp, TypeReferenceExp, LiteralTypeExp, TypeOfExp, ArrayLiteral, IndexedExp, DotExp, ThisExp, ClassDecl, FunctionTypeExp, TypeExp} from './ast';
 import {time, assert } from 'console';
 import {Symbol, SymKind, FunctionSymbol, VarSymbol, built_ins, ClassSymbol, FunctionKind} from './symbol';
 import {Scope} from './scope';
@@ -158,6 +158,17 @@ class TypeResolver extends SemanticAstVisitor{
         return t;
     }
 
+    visitFunctionTypeExp(fte:FunctionTypeExp):any{
+        let paramTypes:Type[] = [];
+        for (let p of fte.paramList.params){
+            paramTypes.push(this.visit(p.typeExp as TypeExp));
+        }
+
+        let returnType = this.visit(fte.returnType);
+
+        return new FunctionType(returnType, paramTypes);
+    }
+
     //自定义类型要提前解析出来，以便被其他类型引用
     visitClassDecl(classDecl:ClassDecl){
         //查找SuperClass
@@ -185,7 +196,6 @@ class TypeResolver extends SemanticAstVisitor{
         //继续遍历
         super.visitClassDecl(classDecl);
     }
-
 
 }
 
@@ -478,11 +488,7 @@ class RefResolver extends SemanticAstVisitor{
             }
         }
         else{ //对于new ClassName()，返回ClassSymbol；对于普通函数，返回FunctionSymbole；对于函数类型的变量，返回VarSymbol；对于方法，是在visitDotExp中处理的。
-            sym = currentScope.getSymbolCascade(functionCall.name) as FunctionSymbol|null;
-            // if(functionCall.name == "speak"){
-            //     console.log("\n!!!!!!!!!!!!!!!!!");
-            //     console.log(sym);
-            // }
+            sym = currentScope.getSymbolCascade(functionCall.name);
         }
 
         // console.log(functionCall.sym);
@@ -504,7 +510,19 @@ class RefResolver extends SemanticAstVisitor{
                 functionCall.sym = sym as FunctionSymbol;    
             }
             else if (sym instanceof VarSymbol){
-                //todo 函数型的变量
+                if (sym.theType instanceof FunctionType){
+                    functionCall.sym = sym;
+                    functionCall.theType = sym.theType.returnType;
+                }
+                else if (sym.theType == SysTypes.Any){
+                    functionCall.sym = sym;
+                    functionCall.theType = SysTypes.Any;
+                }
+                else{
+                    this.addError("'" + sym.name + "' should be of FunctionType.", functionCall);
+                    console.log(sym);
+                    functionCall.theType = SysTypes.Any;   //todo: 这里以后是否需要修改？
+                }
             }
             else{ //FunctionSymbol
                 functionCall.sym = sym as FunctionSymbol;
@@ -548,16 +566,26 @@ class RefResolver extends SemanticAstVisitor{
     /**
      * 变量引用消解
      * 变量必须声明在前，使用在后。
-     * @param variable 
+     * 
+     * 注意：如果给变量赋值一个函数，那么此时该变量的Symbol是一个FunctionSymbol，比如下面例子中的sum。
+     * 
+     * function sum(prev:number, cur:number):number{
+     *   return prev + cur;
+     * }
+     * let fun:(prev:number,cur:number)=>number = sum;
+     * 
+     * 这个时候，变量fun的Symbole就是FunctionSymbol.
+     * 
      */
     visitVariable(variable: Variable):any{
         let currentScope = this.scope as Scope;
-        variable.sym = this.findVariableCascade(currentScope, variable);
-        if (!variable.sym){
-            this.addError("Variable : '" + variable.name + "' is not resolved.", variable);
+        let sym = this.findSymbolCascade(currentScope, variable);
+        if (sym instanceof VarSymbol || sym instanceof FunctionSymbol){
+            variable.sym = sym;
+            variable.theType = sym.theType;  //声明时的类型
         }
         else{
-            variable.theType = variable.sym.theType;  //声明时的类型。
+            this.addError("Variable : '" + variable.name + "' is not resolved.", variable);
         }
     }
 
@@ -631,7 +659,7 @@ class RefResolver extends SemanticAstVisitor{
      * @param name 
      * @param kind 
      */
-    private findVariableCascade(scope:Scope, variable:Variable):VarSymbol|null{
+    private findSymbolCascade(scope:Scope, variable:Variable):Symbol|null{
         let declaredSyms = this.declaredVarsMap.get(scope) as Map<string,VarSymbol>;
         let symInScope = scope.getSymbol(variable.name);
         if (symInScope != null){
@@ -639,12 +667,15 @@ class RefResolver extends SemanticAstVisitor{
                 return declaredSyms.get(variable.name) as VarSymbol; //找到了，成功返回。
             }
             else{
-                if (symInScope.kind == SymKind.Variable){
+                if (symInScope instanceof VarSymbol){
                     this.addError("Variable: '" + variable.name + "' is used before declaration.", variable);
                 }
-                else{
-                    this.addError("We expect a variable of name: '" + variable.name + "', but find a " + SymKind[symInScope.kind] + ".", variable);
+                else if (symInScope instanceof FunctionSymbol){
+                    return symInScope;
                 }
+                // else{
+                //     this.addError("We expect a variable of name: '" + variable.name + "', but find a " + SymKind[symInScope.kind] + ".", variable);
+                // }
             }
         }
         else{
@@ -654,11 +685,11 @@ class RefResolver extends SemanticAstVisitor{
                     return null;
                 }
                 else{
-                    return this.findVariableCascade(scope.enclosingScope, variable);
+                    return this.findSymbolCascade(scope.enclosingScope, variable);
                 }
             }
             else{
-                this.addError("Cannot find a variable of name: '" + variable.name +"'", variable);
+                this.addError("Cannot find a symbol of name: '" + variable.name +"'", variable);
             }
         }
         return null;
@@ -941,7 +972,7 @@ class TypeChecker extends SemanticAstVisitor{
             let t2 = variableDecl.init.theType as Type;
 
             if (!TypeUtil.LE(t2,t1)){
-                this.addError("Operator '=' can not be applied to '"+t1.toString()+"' and '"+t2.toString()+"'." ,variableDecl);
+                this.addError("Operator '=' can not be applied to '" + t1.toString() + "' and '"+t2.toString()+"'.", variableDecl);
             }
             else{
                 //设置变量的常量值
@@ -1409,8 +1440,9 @@ class TypeChecker extends SemanticAstVisitor{
     }
 
     visitFunctionCall(functionCall:FunctionCall):any{
-        if (functionCall.sym != null){
-            let functionType = functionCall.sym.theType as FunctionType;
+        let functionType:FunctionType|null = null;
+        if (functionCall.sym instanceof FunctionSymbol){
+            functionType = functionCall.sym.theType as FunctionType;
 
             //注意：不使用函数类型，而是使用返回值的类型
             if(functionCall.sym.functionKind == FunctionKind.Constructor){
@@ -1426,7 +1458,15 @@ class TypeChecker extends SemanticAstVisitor{
             else{
                 functionCall.theType = functionType.returnType;  
             }     
-
+        }
+        else if (functionCall.sym instanceof VarSymbol){
+            if (functionCall.sym.theType instanceof FunctionType){
+                functionType = functionCall.sym.theType;
+            }
+        }
+        
+        //检查参数类型
+        if(functionType){
             //检查参数数量
             if(functionCall.arguments.length != functionType.paramTypes.length){
                 this.addError("FunctionCall of " + functionCall.name +" has " + functionCall.arguments.length + " arguments, while expecting " + functionType.paramTypes.length +".",functionCall);

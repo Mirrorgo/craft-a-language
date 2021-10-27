@@ -52,8 +52,8 @@ export class FunctionSymbol extends Symbol{
     classSym:ClassSymbol|null = null;  //当FunctionSymbol是类的方法时，设置所关联的类。
 
     //是否是方法
-    get isMethod():boolean{
-        return this.classSym != null;
+    get isMethodOrConstructor():boolean{
+        return this.classSym != null;  
     }
 
     //获取全名称，也就是“类名.方法名”
@@ -139,10 +139,19 @@ export class ClassSymbol extends Symbol{
     }
 
     //计算总的属性的数量，包括自身的属性数和各级父类的属性数。
-    getNumTotalProps():number{
+    get numTotalProps():number{
         let num = this.props.length;
         if (this.superClassSym){
-            num += this.superClassSym.getNumTotalProps(); //递归查找
+            num += this.superClassSym.numTotalProps; //递归查找
+        }
+        return num;
+    }
+
+    //计算总的属性的数量，包括自身的属性数和各级父类的属性数。
+    get numTotalMethods():number{
+        let num = this.methods.length;
+        if (this.superClassSym){
+            num += this.superClassSym.numTotalMethods; //递归查找
         }
         return num;
     }
@@ -154,7 +163,27 @@ export class ClassSymbol extends Symbol{
             if (this.superClassSym) index = this.superClassSym.getPropIndex(prop);
         }
         else{
-            if (this.superClassSym) index += this.superClassSym.getNumTotalProps();
+            if (this.superClassSym) index += this.superClassSym.numTotalProps;
+        }
+        return index;
+    }
+
+    //返回某个方法在总的方法中的序号，用于计算在vtable中的偏移量
+    //考虑了方法覆盖的情况
+    getMethodIndex(methodName:string):number{
+        let index = -1;
+        for (let i = 0; i < this.methods.length; i++){
+            if (this.methods[i].name == methodName){
+                index = i;
+                break;
+            }
+        }
+
+        if (index == -1){
+            if (this.superClassSym) index = this.superClassSym.getMethodIndex(methodName);
+        }
+        else{
+            if (this.superClassSym) index += this.superClassSym.numTotalMethods;
         }
         return index;
     }
@@ -237,6 +266,8 @@ let FUN_string_create_by_str = new FunctionSymbol("string_create_by_cstr", new F
 let FUN_string_concat = new FunctionSymbol("string_concat", new FunctionType(SysTypes.String,[SysTypes.String,SysTypes.String]),[new VarSymbol("str1", SysTypes.String), new VarSymbol("str2", SysTypes.String)]);
 let FUN_array_create_by_length = new FunctionSymbol("array_create_by_length", new FunctionType(SysTypes.Object,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
 let FUN_object_create_by_length = new FunctionSymbol("object_create_by_length", new FunctionType(SysTypes.Object,[SysTypes.Integer]),[new VarSymbol("a", SysTypes.Integer)]);
+let FUN_double_to_string = new FunctionSymbol("double_to_string", new FunctionType(SysTypes.Object,[SysTypes.Number]),[new VarSymbol("a", SysTypes.Number)]);
+
 
 export let built_ins:Map<string, FunctionSymbol> = new Map([
     ["println", FUN_println],
@@ -245,12 +276,13 @@ export let built_ins:Map<string, FunctionSymbol> = new Map([
     ["println_d", FUN_println_d],
     ["tick", FUN_tick],
     ["tick_d", FUN_tick_d],
-    ["integer_to_string", FUN_integer_to_string],
+    ["integer_to_string", FUN_integer_to_string],  //todo:去掉？
 
     ["string_create_by_cstr", FUN_string_create_by_str],
     ["string_concat", FUN_string_concat],
     ["array_create_by_length", FUN_array_create_by_length],
     ["object_create_by_length", FUN_object_create_by_length],
+    ["double_to_string", FUN_double_to_string],
 ]);
 
 

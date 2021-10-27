@@ -88,8 +88,34 @@ class TypeUtil {
             case TypeKind.Intersection:
                 rtn = TypeUtil.LE_I_T(t1, t2);
                 break;
+            case TypeKind.Function:
+                if (t2.kind == TypeKind.Function) {
+                    return TypeUtil.LE_T_T(t1, t2);
+                }
+                else {
+                    rtn = false;
+                }
+                break;
         }
         return rtn;
+    }
+    static LE_T_T(t1, t2) {
+        if (t1.paramTypes.length == t2.paramTypes.length) {
+            if (TypeUtil.LE(t1.returnType, t2.returnType)) {
+                for (let i = 0; i < t1.paramTypes.length; i++) {
+                    if (!TypeUtil.LE(t1.paramTypes[i], t2.paramTypes[i])) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+            else {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
     }
     static LE_N_N(t1, t2) {
         if (t1.upperTypes.indexOf(t2) != -1) {
@@ -1126,7 +1152,10 @@ class TypeUtil {
         if (t instanceof NamedType) {
             theType = t;
         }
-        if (t instanceof ValueType) {
+        else if (t instanceof FunctionType) {
+            theType = t;
+        }
+        else if (t instanceof ValueType) {
             if (t !== SysTypes.Null || t !== SysTypes.Undefined) { //null和undefined不需要改变
                 theType = t.typeOfValue;
             }

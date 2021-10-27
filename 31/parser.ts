@@ -21,12 +21,13 @@
  * variableStatement : 'let' variableDecl ';';
  * variableDecl : (Identifier|arrayLiteral) typeAnnotation？ ('=' expression)? ;
  * typeAnnotation : ':' type_;
- * type_ : unionOrIntersectionOrPrimaryType ;
+ * type_ : unionOrIntersectionOrPrimaryType | functionType;
  * unionOrIntersectionOrPrimaryType : primaryType ('|' | '&' primaryType)* ;
  * primaryType : primaryTypeLeft ('[' ']') * ;
  * primaryTypeLeft : predefinedType | literal | typeReference | '(' type_ ')' ;
  * predefinedType : 'number' | 'string' | 'boolean' | 'any' | 'void';
  * typeReference : Identifier ;
+ * functionType : '(' parameterList? ')' '=>' type_;
  * functionDecl: "function" Identifier callSignature  block ;
  * callSignature: '(' parameterList? ')' typeAnnotation? ;
  * returnStatement: 'return' expression? ';' ;
@@ -61,7 +62,7 @@
 
 
 import {Token, TokenKind, Scanner, Op, Seperator, Keyword, Position, Operators} from './scanner';
-import {AstVisitor, AstNode, Block, Prog, VariableStatement, VariableDecl, FunctionDecl, CallSignature, ParameterList ,FunctionCall, Statement, Expression, ExpressionStatement, Binary, Unary, IntegerLiteral, DecimalLiteral, StringLiteral, NullLiteral, BooleanLiteral, Literal, Variable, ReturnStatement, IfStatement, ForStatement, TypeExp, PrimTypeExp, PredefinedTypeExp, LiteralTypeExp, TypeReferenceExp, ParenthesizedPrimTypeExp, ArrayPrimTypeExp, IndexedExp, UnionOrIntersectionTypeExp, ErrorExp, ErrorStmt, TypeOfExp, ArrayLiteral, EmptyStatement, ClassDecl, ThisExp, SuperExp, DotExp} from './ast';
+import {AstVisitor, AstNode, Block, Prog, VariableStatement, VariableDecl, FunctionDecl, CallSignature, ParameterList ,FunctionCall, Statement, Expression, ExpressionStatement, Binary, Unary, IntegerLiteral, DecimalLiteral, StringLiteral, NullLiteral, BooleanLiteral, Literal, Variable, ReturnStatement, IfStatement, ForStatement, TypeExp, PrimTypeExp, PredefinedTypeExp, LiteralTypeExp, TypeReferenceExp, ParenthesizedPrimTypeExp, ArrayPrimTypeExp, IndexedExp, UnionOrIntersectionTypeExp, ErrorExp, ErrorStmt, TypeOfExp, ArrayLiteral, EmptyStatement, ClassDecl, ThisExp, SuperExp, DotExp, FunctionTypeExp} from './ast';
 import { assert } from 'console';
 import { SysTypes, Type, UnionType} from './types';
 import {CompilerError} from './error'
@@ -429,16 +430,63 @@ export class Parser{
 
     /**
      * 解析类型。
-     * 目前通过这个函数可以解析两种类型：Union类型和Primary类型
-     * typeAnnotation : ':' type_;
-     * type_ : unionOrIntersectionOrPrimaryType ;
-     * unionOrIntersectionOrPrimaryType : primaryType ('|' | '&' primaryType)* ;
-     * primaryType : predefinedType | literal | typeReference | primaryType '[' ']' | '(' type_ ')' ;
-     * 
-     * typeReference : Identifier ;
      */
     private parseType():TypeExp{
-        return this.parseUnionOrIntersectionOrPrimaryType();
+        let t1 = this.scanner.peek();
+        let rtn:TypeExp;
+
+        if (t1.code == Seperator.OpenParen){
+            let t2 = this.scanner.peek2();
+            if (t2.kind == TokenKind.Identifier){
+                let t3 = this.scanner.peek3();
+                if (t3.code == Seperator.Colon){
+                    rtn = this.parseFunctionType();
+                }
+                else{
+                    rtn = this.parseUnionOrIntersectionOrPrimaryType();
+                }
+            }
+            else{
+                rtn = this.parseUnionOrIntersectionOrPrimaryType();
+            }
+        }
+        else{
+            rtn = this.parseUnionOrIntersectionOrPrimaryType();
+        }
+
+        return rtn as TypeExp;
+    }
+
+    private parseFunctionType():FunctionTypeExp{
+        let beginPos = this.scanner.getNextPos();
+
+        this.scanner.next(); //跳过'('
+        let paramList = this.parseParameterList();
+        console.log("\nparamList");
+        console.log(paramList);
+        let t = this.scanner.peek();
+        if (t.code == Seperator.CloseParen){
+            this.scanner.next(); //跳过‘)’
+        }
+        else{
+            this.skip();
+            this.addError("Expecting ')' when parsing FunctionType, while we got '" + t.text + "'.", t.pos);
+        }
+
+        let t1 = this.scanner.peek();
+        let returnType: TypeExp|null = null; 
+        if (t1.code == Op.ARROW){ //'=>'
+            this.scanner.next();  //跳过'=>'
+            returnType = this.parseType();
+        }
+        else{
+            this.skip();
+            this.addError("Expecting '=>' when parsing FunctionType, while we got '" + t1.text + "'.", t1.pos)
+        }
+
+        if(!returnType) returnType =  new TypeReferenceExp(beginPos, this.scanner.getLastPos(), t1.text, true);  //一个用于占位的错误类型
+
+        return new FunctionTypeExp(beginPos, this.scanner.getLastPos(), paramList, returnType);
     }
 
     /**
@@ -512,7 +560,7 @@ export class Parser{
         }
         else{
             this.addError("Unsupported type expression: " + t.text, t.pos);
-            primType = new TypeReferenceExp(beginPos, this.scanner.getLastPos(), t.text, true);
+            primType = new TypeReferenceExp(beginPos, this.scanner.getLastPos(), t.text, true);  //一个用于占位的错误类型
             this.scanner.next();
         }
 

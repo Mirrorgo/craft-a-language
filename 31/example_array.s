@@ -21,8 +21,6 @@ LCPI0_9:
 	.quad	0x4014000000000000		## double 5
 LCPI0_10:
 	.quad	0x4018000000000000		## double 6
-LCPI0_11:
-	.quad	0x401c000000000000		## double 7
 
 	.section	__TEXT,__text,regular,pure_instructions
 
@@ -32,7 +30,7 @@ _main:
 ## bb.0
     pushq	%rbp
     movq	%rsp, %rbp
-    subq	$144, %rsp
+    subq	$128, %rsp
 ## bb.1
     movq	$3, %rdi
     callq	_array_create_by_length
@@ -48,7 +46,7 @@ _main:
     movsd	LCPI0_4(%rip), %xmm4		#  movsd	doubleIndex(4), var1(sum):double
     movsd	LCPI0_4(%rip), %xmm5		#  movsd	doubleIndex(4), var2(i):double
 LBB0_2:
-    cmpq	LCPI0_5(%rip), %xmm5		#  cmpq	doubleIndex(5), var2(i):double
+    ucomisd	LCPI0_5(%rip), %xmm5		#  ucomisd	doubleIndex(5), var2(i):double
     jge	LBB0_4
 ## bb.3
     cvttsd2si	%xmm5, %r11		#  cvttsd2si	var2(i):double, var11(temp):int64
@@ -112,7 +110,7 @@ LBB0_4:
     callq	_println_s
     movsd	LCPI0_4(%rip), %xmm8		#  movsd	doubleIndex(4), var4(i):double
 LBB0_5:
-    cmpq	LCPI0_5(%rip), %xmm8		#  cmpq	doubleIndex(5), var4(i):double
+    ucomisd	LCPI0_5(%rip), %xmm8		#  ucomisd	doubleIndex(5), var4(i):double
     jge	LBB0_7
 ## bb.6
     movq	%r10, -16(%rbp)			#  spill	var0
@@ -178,12 +176,7 @@ LBB0_7:
     movq	%r8, -128(%rbp)			#  spill	var18
     movq	%rcx, %r8				#  movq	var36(temp):int64, var40(temp):int64
     movq	%r8, 24(%rdx)				#  movq	var40(temp):int64, 24(var5)
-    movsd	%xmm3, -136(%rbp)		#  spill	var10
-    movsd	24(%rdx), %xmm3		#  movsd	24(var5), var41(temp):double
-    movsd	%xmm4, -24(%rbp)		#  spill	var1
-    movsd	LCPI0_11(%rip), %xmm4		#  movsd	doubleIndex(11), var42(temp):double
-    movsd	%xmm4, 32(%xmm3)		#  movsd	var42(temp):double, 32(var41)
-    addq	$144, %rsp
+    addq	$128, %rsp
     popq	%rbp
     retq
 	.cfi_endproc

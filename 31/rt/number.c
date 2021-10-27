@@ -23,9 +23,9 @@ PlayString* integer_to_string(int num){
 }
 
 PlayString* double_to_string(double num){
-    char digits[11];
+    char digits[100];
 
-    sprintf(digits, "%-10lf", num);
+    sprintf(digits, "%-lf", num);
 
     //todo去除掉小数点后多余的0
 

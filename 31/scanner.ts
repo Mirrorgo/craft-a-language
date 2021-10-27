@@ -195,6 +195,15 @@ export class Scanner{
         return t; 
     }
 
+    peek3():Token{
+        let t:Token|undefined = this.tokens[2];
+        while (typeof t == 'undefined'){
+            this.tokens.push(this.getAToken());
+            t = this.tokens[2];
+        }
+        return t; 
+    }
+
     //获取接下来的Token的位置
     getNextPos():Position{
         return this.peek().pos;

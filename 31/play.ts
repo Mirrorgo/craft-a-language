@@ -7,7 +7,7 @@ import {TokenKind, Scanner, CharStream, Op} from './scanner';
 import {AstVisitor, AstNode, Block, Prog, VariableDecl, FunctionDecl, FunctionCall, Statement, Expression, ExpressionStatement, Binary, Unary, IntegerLiteral, DecimalLiteral, StringLiteral, Variable, ReturnStatement, IfStatement, ForStatement, AstDumper, IndexedExp, TypeOfExp, DotExp, ThisExp} from './ast';
 import {Parser} from './parser';
 import {SemanticAnalyer} from './semantic';
-import {Symbol, SymKind, VarSymbol, FUN_println, FunctionKind, ClassSymbol} from './symbol';
+import {Symbol, SymKind, VarSymbol, FUN_println, FunctionKind, ClassSymbol, FunctionSymbol} from './symbol';
 import {Scope, ScopeDumper} from './scope';
 import {BCModule, BCGenerator, VM, BCModuleDumper, BCModuleReader, BCModuleWriter} from './vm'
 import {compileToAsm} from './asm_x86-64'
@@ -154,91 +154,111 @@ class Intepretor extends AstVisitor{
         else if (functionCall.name == "integer_to_string"){
             return this.integer_to_string(functionCall.arguments);
         }
-        
-        if(functionCall.sym != null){
-            //清空返回值
-            this.currentFrame.retVal = undefined;
 
-            //1.创建新栈桢
-            let frame = new StackFrame();
-
-            //2.计算参数值，并保存到新创建的栈桢
-            let functionDecl = functionCall.sym.decl as FunctionDecl;
-            if (functionDecl.callSignature.paramList != null){
-                let params = functionDecl.callSignature.paramList.params;
-                for (let i = 0; i< params.length; i++){
-                    let variableDecl = params[i];
-                    let val = this.visit(functionCall.arguments[i]);
-                    frame.values.set(variableDecl.sym as Symbol, val);  //设置到新的frame里。
-                }
-            }
-
-            //如果是对象的方法，那要往栈桢里设置一个特殊的this变量
-            let newObject:PlayObject|null = null;
-            if(functionCall.sym.functionKind == FunctionKind.Constructor){
-                if (functionCall.name == "super"){ //调用super()
-                    //找到当前类的ClassSymbol
-                    let classDecl = this.getEnclosingClassDecl(functionCall);
-                    if (classDecl){
-                        let classSym = classDecl.sym as ClassSymbol;
-                        let playObject = this.getVariableValue(classSym);
-                        frame.values.set(functionCall.sym.classSym as ClassSymbol, playObject); //设置成父类的ClassSymbol，便于被this来引用
-                    }
-                    else{
-                        console.log("Runtime error: can not find enclosing class for super().");
-                    }
-                }
-                else{ //new一个对象
-                    let topScope = this.getProg(functionCall).scope as Scope;
-                    let classSym = topScope.getSymbol(functionCall.name);
-                    if (classSym && classSym instanceof ClassSymbol){
-                        newObject = new PlayObject(classSym);
-                        frame.values.set(classSym, newObject);
-                    }
-                    else{
-                        console.log("Runtime error: cannot find class symbol for 'this'.");
-                    }
-                }
-            }
-            else if (functionCall.sym.functionKind == FunctionKind.Method){
-                if (obj && obj instanceof PlayObject){
-                    frame.values.set(obj.classSym, obj);
-
-                    //动态绑定：重新确定用哪个FunctionDecl
-                    let functionSym = obj.classSym.getMethodCascade(functionCall.name);
-                    if (functionSym){
-                        functionDecl = functionSym.decl as FunctionDecl;
-                    }
-                    else{
-                        //理论上不会到这里
-                        console.log("Runtime error: failed to dynamic binding method: '" + functionCall.name + "'");
-                    }
-                }
-                else{
-                    console.log("Runtime error: method invode need an object reference.");
-                }
-            }
-
-            //3.把新栈桢入栈 
-            this.pushFrame(frame);
-
-            //4.执行函数
-            this.visit(functionDecl.body);            
-
-            //5.弹出当前的栈桢
-            this.popFrame();
-
-            //5.函数的返回值
-            if (functionCall.sym.functionKind == FunctionKind.Constructor){
-                return newObject;   //返回新创建的对象。
+        let functionSym:FunctionSymbol|null = null;
+        if (functionCall.sym instanceof FunctionSymbol){
+            functionSym = functionCall.sym;
+        }
+        else if (functionCall.sym instanceof VarSymbol){
+            //函数类型的变量，可以从帧中取出一个FunctionSymbol类型的值。
+            let value = this.getVariableValue(functionCall.sym);
+            if (value instanceof FunctionSymbol){
+                functionSym = value;
             }
             else{
-                return this.currentFrame.retVal;
+                console.log("Runtime error: value of function variable '" + functionCall.name + "' should be a FunctionSymbol.");
             }
         }
+
+        if (functionSym){
+            return this.processFunctionCall(functionCall.name, functionSym, functionCall.arguments, obj);
+        }
         else{
-            console.log("Runtime error, cannot find declaration of " + functionCall.name +".");
-            return;
+            //理论上不会发生
+            console.log("Runtime error: FunctionCall '" + functionCall.name + "' can not find it's definition.");
+            return undefined;
+        }
+    }
+
+    private processFunctionCall(functionName:string, functionSym:FunctionSymbol, args:Expression[], obj:any){
+        //清空返回值
+        this.currentFrame.retVal = undefined;
+
+        //1.创建新栈桢
+        let frame = new StackFrame();
+
+        //2.计算参数值，并保存到新创建的栈桢
+        let functionDecl = functionSym.decl as FunctionDecl;
+        if (functionDecl.callSignature.paramList != null){
+            let params = functionDecl.callSignature.paramList.params;
+            for (let i = 0; i< params.length; i++){
+                let variableDecl = params[i];
+                let val = this.visit(args[i]);
+                frame.values.set(variableDecl.sym as Symbol, val);  //设置到新的frame里。
+            }
+        }
+
+        //如果是对象的方法，那要往栈桢里设置一个特殊的this变量
+        let newObject:PlayObject|null = null;
+        if(functionSym.functionKind == FunctionKind.Constructor){
+            if (functionName == "super"){ //调用super()
+                //找到当前类的ClassSymbol
+                // let classDecl = this.getEnclosingClassDecl(functionCall);
+                let classSym = functionSym.classSym;
+                if (classSym){
+                    let playObject = this.getVariableValue(classSym);
+                    frame.values.set(functionSym.classSym as ClassSymbol, playObject); //设置成父类的ClassSymbol，便于被this来引用
+                }
+                else{
+                    console.log("Runtime error: can not find enclosing class for super().");
+                }
+            }
+            else{ //new一个对象
+                let classSym = functionSym.classSym;
+                if (classSym && classSym instanceof ClassSymbol){
+                    newObject = new PlayObject(classSym);
+                    frame.values.set(classSym, newObject);
+                }
+                else{
+                    console.log("Runtime error: cannot find class symbol for 'this'.");
+                }
+            }
+        }
+        else if (functionSym.functionKind == FunctionKind.Method){
+            if (obj && obj instanceof PlayObject){
+                frame.values.set(obj.classSym, obj);
+
+                //动态绑定：重新确定用哪个FunctionDecl
+                let functionSym = obj.classSym.getMethodCascade(functionName);
+                if (functionSym){
+                    functionDecl = functionSym.decl as FunctionDecl;
+                }
+                else{
+                    //理论上不会到这里
+                    console.log("Runtime error: failed to dynamic binding method: '" + functionName + "'");
+                }
+            }
+            else{
+                console.log("Runtime error: method invode need an object reference.");
+            }
+        }
+
+        //3.把新栈桢入栈 
+        this.pushFrame(frame);
+
+        //4.执行函数
+        this.visit(functionDecl.body);            
+
+        //5.弹出当前的栈桢
+        this.popFrame();
+
+        //5.函数的返回值
+        // if (functionSym.functionKind == FunctionKind.Constructor){
+        if (newObject){
+            return newObject;   //返回新创建的对象。
+        }
+        else{
+            return this.currentFrame.retVal;
         }
     }
 
@@ -329,8 +349,25 @@ class Intepretor extends AstVisitor{
         }
     }
 
+    /**
+     * 返回变量的值。
+     * 注意：如果sym是FunctionSymbol，那直接返回这个符号。
+     * 场景：
+     * 
+     * function sum(prev:number, cur:number):number{
+     *   return prev + cur;
+     *   }
+     * let fun:(prev:number,cur:number)=>number = sum;
+     * 
+     * 这个时候，变量sum的Symbol就是FunctionSymbol.
+     */
     private getVariableValue(sym:Symbol):any{
-        return this.currentFrame.values.get(sym);
+        if (sym instanceof FunctionSymbol){
+            return sym;
+        }
+        else{
+            return this.currentFrame.values.get(sym);
+        }
     }
 
     private setVariableValue(sym:Symbol, value:any):any{

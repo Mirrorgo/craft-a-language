@@ -82,9 +82,36 @@ export class TypeUtil{
             case TypeKind.Intersection:
                 rtn = TypeUtil.LE_I_T(t1 as IntersectionType, t2);
                 break;
+            case TypeKind.Function:
+                if(t2.kind == TypeKind.Function){
+                    return TypeUtil.LE_T_T(t1 as FunctionType, t2 as FunctionType);
+                }
+                else{
+                    rtn = false;
+                }
+                break;
         }
 
         return rtn;
+    }
+
+    private static LE_T_T(t1: FunctionType, t2: FunctionType):boolean{
+        if (t1.paramTypes.length == t2.paramTypes.length){
+            if (TypeUtil.LE(t1.returnType, t2.returnType)){
+                for (let i = 0; i< t1.paramTypes.length; i++){
+                    if (!TypeUtil.LE(t1.paramTypes[i], t2.paramTypes[i])){
+                        return false;
+                    }
+                }
+                return true;
+            }
+            else{
+                return false;
+            }
+        }
+        else{
+            return false;
+        }
     }
 
     private static LE_N_N(t1: NamedType, t2: NamedType):boolean{
@@ -1200,7 +1227,10 @@ export class TypeUtil{
         if (t instanceof NamedType){
             theType = t; 
         }
-        if (t instanceof ValueType){
+        else if (t instanceof FunctionType){
+            theType = t;
+        }
+        else if (t instanceof ValueType){
             if(t !== SysTypes.Null || t !== SysTypes.Undefined){ //null和undefined不需要改变
                 theType = t.typeOfValue;
             }
@@ -1484,8 +1514,8 @@ export class ArrayType extends Type{
 
 //todo: 需要检查循环引用
 export class FunctionType extends Type{
-    returnType:Type;
-    paramTypes:Type[];
+    returnType:Type;    //返回值类型
+    paramTypes:Type[];  //参数的类型
     static index:number = 0; //序号，用于给函数类型命名
     constructor(returnType:Type = SysTypes.Void, paramTypes:Type[]=[], name:string|undefined = undefined){
         super(TypeKind.Function); 

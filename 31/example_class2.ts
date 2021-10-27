@@ -4,7 +4,6 @@
 
 class Mammal{
     weight:number = 0;
-    // weight2;
     color:string;
     constructor(weight:number, color:string){
         this.weight = weight;  
@@ -15,19 +14,20 @@ class Mammal{
     }
 }
 
-class Human extends Mammal{  //新的语法要素：extends
-    name:string;
-    constructor(weight:number, color:string, name:string){
-        super(weight,color); //新的语法要素：super
-        this.name = name;
-    }
-    swim(){
-        println("My weight is " +this.weight + ", so I swimming to exercise.");
-    }
-    speak(){
-        println("Hello PlayScript!");
-    }
-}
+// class Human extends Mammal{  //新的语法要素：extends
+//     name:string;
+//     constructor(weight:number, color:string, name:string){
+//         super(weight,color); //新的语法要素：super
+//         this.name = name;
+//     }
+//     swim(){
+//         println("My weight is " +this.weight + ", so I swimming to exercise.");
+//     }
+//     speak(){
+//         println("Hello PlayScript!");
+//     }
+// }
+
 
 class Cat extends Mammal{
     constructor(weight:number, color:string){
@@ -41,15 +41,16 @@ class Cat extends Mammal{
     }
 }
 
-function foo(mammal:Mammal){
-    mammal.speak();
-}
+// function foo(mammal:Mammal){
+//     mammal.speak();
+// }
 
 let mammal1 : Mammal;
-let mammal2 : Mammal;
+// let mammal2 : Mammal;
 
 mammal1 = new Cat(1,"white");
-mammal2 = new Human(20, "yellow", "Richard");
+mammal1.speak();
+// mammal2 = new Human(20, "yellow", "Richard");
 
-foo(mammal1);
-foo(mammal2);
+// foo(mammal1);
+// foo(mammal2);

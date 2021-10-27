@@ -7,7 +7,7 @@
 * @since 2021-06-04
 */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AstDumper = exports.AstVisitor = exports.SuperExp = exports.ThisExp = exports.DotExp = exports.ClassDecl = exports.ErrorStmt = exports.ErrorExp = exports.UnionOrIntersectionTypeExp = exports.ArrayPrimTypeExp = exports.ParenthesizedPrimTypeExp = exports.TypeReferenceExp = exports.LiteralTypeExp = exports.PredefinedTypeExp = exports.PrimTypeExp = exports.TypeExp = exports.TypeOfExp = exports.IndexedExp = exports.ArrayLiteral = exports.BooleanLiteral = exports.NullLiteral = exports.DecimalLiteral = exports.IntegerLiteral = exports.StringLiteral = exports.Literal = exports.Variable = exports.FunctionCall = exports.Unary = exports.Binary = exports.Expression = exports.EmptyStatement = exports.ForStatement = exports.IfStatement = exports.ReturnStatement = exports.ExpressionStatement = exports.VariableDecl = exports.VariableStatement = exports.Prog = exports.Block = exports.ParameterList = exports.CallSignature = exports.FunctionDecl = exports.Decl = exports.Statement = exports.AstNode = void 0;
+exports.AstDumper = exports.AstVisitor = exports.SuperExp = exports.ThisExp = exports.DotExp = exports.ClassDecl = exports.ErrorStmt = exports.ErrorExp = exports.FunctionTypeExp = exports.UnionOrIntersectionTypeExp = exports.ArrayPrimTypeExp = exports.ParenthesizedPrimTypeExp = exports.TypeReferenceExp = exports.LiteralTypeExp = exports.PredefinedTypeExp = exports.PrimTypeExp = exports.TypeExp = exports.TypeOfExp = exports.IndexedExp = exports.ArrayLiteral = exports.BooleanLiteral = exports.NullLiteral = exports.DecimalLiteral = exports.IntegerLiteral = exports.StringLiteral = exports.Literal = exports.Variable = exports.FunctionCall = exports.Unary = exports.Binary = exports.Expression = exports.EmptyStatement = exports.ForStatement = exports.IfStatement = exports.ReturnStatement = exports.ExpressionStatement = exports.VariableDecl = exports.VariableStatement = exports.Prog = exports.Block = exports.ParameterList = exports.CallSignature = exports.FunctionDecl = exports.Decl = exports.Statement = exports.AstNode = void 0;
 const symbol_1 = require("./symbol");
 const scanner_1 = require("./scanner");
 const types_1 = require("./types");
@@ -417,6 +417,9 @@ class StringLiteral extends Literal {
         super(pos, pos, value, isErrorNode);
         this.theType = types_1.SysTypes.String;
     }
+    get literal() {
+        return this.value;
+    }
     accept(visitor, additional) {
         return visitor.visitStringLiteral(this, additional);
     }
@@ -430,6 +433,9 @@ class IntegerLiteral extends Literal {
         super(pos, pos, value, isErrorNode);
         this.theType = types_1.SysTypes.Integer;
     }
+    get literal() {
+        return this.value;
+    }
     accept(visitor, additional) {
         return visitor.visitIntegerLiteral(this, additional);
     }
@@ -442,6 +448,9 @@ class DecimalLiteral extends Literal {
     constructor(pos, value, isErrorNode = false) {
         super(pos, pos, value, isErrorNode);
         this.theType = types_1.SysTypes.Decimal;
+    }
+    get literal() {
+        return this.value;
     }
     accept(visitor, additional) {
         return visitor.visitDecimalLiteral(this, additional);
@@ -469,6 +478,9 @@ class BooleanLiteral extends Literal {
         super(pos, pos, value, isErrorNode);
         this.theType = types_1.SysTypes.Boolean;
         this.constValue = value;
+    }
+    get literal() {
+        return this.value;
     }
     accept(visitor, additional) {
         return visitor.visitBooleanLiteral(this, additional);
@@ -633,6 +645,22 @@ class UnionOrIntersectionTypeExp extends TypeExp {
     }
 }
 exports.UnionOrIntersectionTypeExp = UnionOrIntersectionTypeExp;
+class FunctionTypeExp extends TypeExp {
+    constructor(beginPos, endPos, paramList, returnType, isErrorNode = false) {
+        super(beginPos, endPos, isErrorNode);
+        this.returnType = returnType;
+        this.paramList = paramList;
+        this.returnType.parentNode = this;
+        this.paramList.parentNode = this;
+    }
+    accept(visitor, additional) {
+        return visitor.visitFunctionTypeExp(this, additional);
+    }
+    toString() {
+        return "FunctionTypeExp";
+    }
+}
+exports.FunctionTypeExp = FunctionTypeExp;
 /**
  * 代表了一个错误的表达式。
  */
@@ -970,6 +998,10 @@ class AstVisitor {
             this.visit(t1, additional);
         }
     }
+    visitFunctionTypeExp(t, additional = undefined) {
+        this.visit(t.paramList, additional);
+        this.visit(t.returnType, additional);
+    }
     visitErrorExp(errorNode, additional = undefined) {
     }
     visitErrorStmt(errorStmt, additional = undefined) {
@@ -1044,7 +1076,7 @@ class AstDumper extends AstVisitor {
     visitCallSignature(callSinature, prefix) {
         console.log(prefix + (callSinature.isErrorNode ? " **E** " : "") + "Return type: " + callSinature.returnType.toString());
         if (callSinature.paramList != null) {
-            this.visit(callSinature.paramList, prefix + "    ");
+            this.visit(callSinature.paramList, prefix);
         }
     }
     visitParameterList(paramList, prefix) {
@@ -1054,9 +1086,7 @@ class AstDumper extends AstVisitor {
         }
     }
     visitBlock(block, prefix) {
-        if (block.isErrorNode) {
-            console.log(prefix + "Block" + (block.isErrorNode ? " **E** " : ""));
-        }
+        console.log(prefix + "Block:" + (block.isErrorNode ? " **E** " : ""));
         for (let x of block.stmts) {
             this.visit(x, prefix + "    ");
         }
@@ -1194,6 +1224,13 @@ class AstDumper extends AstVisitor {
         for (let t of typeExp.types) {
             this.visit(t, prefix + "    ");
         }
+    }
+    visitFunctionTypeExp(typeExp, prefix) {
+        console.log(prefix + "FunctionType:" + (typeExp.isErrorNode ? " **E** " : ""));
+        console.log(prefix + "  paramList:");
+        this.visit(typeExp.paramList, prefix + "    ");
+        console.log(prefix + "  returnType:");
+        this.visit(typeExp.returnType, prefix + "    ");
     }
     visitErrorExp(errorNode, prefix) {
         console.log(prefix + "Error Expression **E**");

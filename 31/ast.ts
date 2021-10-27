@@ -406,7 +406,7 @@ export class FunctionCall extends Expression{
     name:string;
     arguments: Expression[];
     // decl: FunctionDecl|null=null;  //指向函数的声明
-    sym:FunctionSymbol|null = null;
+    sym:FunctionSymbol|VarSymbol|null = null;
     constructor(beginPos:Position, endPos:Position, name:string, paramValues: Expression[],isErrorNode:boolean = false){
         super(beginPos, endPos, isErrorNode);
         this.name = name;
@@ -426,7 +426,7 @@ export class FunctionCall extends Expression{
  */
 export class Variable extends Expression{
     name:string;
-    sym:VarSymbol|null = null;
+    sym:VarSymbol|FunctionSymbol|null = null;
     constructor(beginPos:Position, endPos:Position, name:string,isErrorNode:boolean = false){
         super(beginPos, endPos,  isErrorNode);
         this.name = name;
@@ -459,6 +459,11 @@ export class StringLiteral extends Literal{
         super(pos, pos, value, isErrorNode);
         this.theType = SysTypes.String;
     }
+
+    get literal():string{
+        return this.value as string;
+    }
+
     public accept(visitor:AstVisitor, additional:any):any{
         return visitor.visitStringLiteral(this,additional);
     }
@@ -472,6 +477,11 @@ export class IntegerLiteral extends Literal{
         super(pos, pos, value,isErrorNode);
         this.theType = SysTypes.Integer;
     }
+
+    get literal():number{
+        return this.value as number;
+    }
+
     public accept(visitor:AstVisitor, additional:any):any{
         return visitor.visitIntegerLiteral(this,additional);
     }
@@ -485,6 +495,11 @@ export class DecimalLiteral extends Literal{
         super(pos, pos, value, isErrorNode);
         this.theType = SysTypes.Decimal;
     }
+
+    get literal():number{
+        return this.value as number;
+    }
+    
     public accept(visitor:AstVisitor, additional:any):any{
         return visitor.visitDecimalLiteral(this,additional);
     }
@@ -512,6 +527,11 @@ export class BooleanLiteral extends Literal{
         this.theType = SysTypes.Boolean;
         this.constValue = value;
     }
+
+    get literal():boolean{
+        return this.value as boolean;
+    }
+
     public accept(visitor:AstVisitor, additional:any):any{
         return visitor.visitBooleanLiteral(this,additional);
     }
@@ -702,6 +722,26 @@ export class UnionOrIntersectionTypeExp extends TypeExp{
 
     toString():string{
         return "UnionOrIntersectionTypeExp";
+    }
+}
+
+export class FunctionTypeExp extends TypeExp{
+    returnType:TypeExp;
+    paramList:ParameterList;
+    constructor(beginPos:Position, endPos:Position, paramList:ParameterList, returnType:TypeExp, isErrorNode:boolean = false){
+        super(beginPos, endPos, isErrorNode);
+        this.returnType = returnType;
+        this.paramList = paramList;
+        this.returnType.parentNode = this;
+        this.paramList.parentNode = this;
+    }
+
+    public accept(visitor:AstVisitor, additional:any):any{
+        return visitor.visitFunctionTypeExp(this,additional);
+    }
+
+    toString():string{
+        return "FunctionTypeExp";
     }
 }
 
@@ -1105,6 +1145,12 @@ export abstract class AstVisitor{
         }
     }
 
+    visitFunctionTypeExp(t:FunctionTypeExp, additional:any=undefined):any{
+        this.visit(t.paramList, additional);
+        this.visit(t.returnType, additional);
+    }
+
+
     visitErrorExp(errorNode:ErrorExp, additional:any=undefined):any{
     }
 
@@ -1193,7 +1239,7 @@ export class AstDumper extends AstVisitor{
     visitCallSignature(callSinature:CallSignature, prefix:any):any{
         console.log(prefix+ (callSinature.isErrorNode? " **E** " : "")+"Return type: " + callSinature.returnType.toString());
         if (callSinature.paramList!=null){
-            this.visit(callSinature.paramList, prefix + "    ");
+            this.visit(callSinature.paramList, prefix);
         }
     }
 
@@ -1205,9 +1251,7 @@ export class AstDumper extends AstVisitor{
     }
 
     visitBlock(block:Block, prefix:any):any{
-        if(block.isErrorNode){
-            console.log(prefix + "Block" + (block.isErrorNode? " **E** " : ""))
-        }
+        console.log(prefix + "Block:" + (block.isErrorNode? " **E** " : ""));
         for(let x of block.stmts){
             this.visit(x, prefix+"    ");
         }
@@ -1369,6 +1413,17 @@ export class AstDumper extends AstVisitor{
             this.visit(t, prefix+"    ");
         }
     }
+
+    visitFunctionTypeExp(typeExp:FunctionTypeExp, prefix:any):any{
+        console.log(prefix + "FunctionType:" + (typeExp.isErrorNode? " **E** " : ""));
+        
+        console.log(prefix+"  paramList:")
+        this.visit(typeExp.paramList, prefix+"    ");
+        
+        console.log(prefix+"  returnType:")
+        this.visit(typeExp.returnType, prefix+"    ");
+    }
+
 
     visitErrorExp(errorNode:ErrorExp, prefix:any):any{
         console.log(prefix+"Error Expression **E**");
