@@ -27,30 +27,22 @@ class Intepretor extends AstVisitor{
     callStack: StackFrame[] = [];
 
     //当前栈桢
-    // _currentFrame: StackFrame|null = null;
-
     get currentFrame():StackFrame{
         return this.callStack[this.callStack.length-1];
     }
 
     private pushFrame(frame:StackFrame){
         this.callStack.push(frame);
-        // this.currentFrame = frame;
     }
 
     private popFrame(){
         if (this.callStack.length>1){
-            // let frame = this.callStack[this.callStack.length-2];
             this.callStack.pop();
-            // this.currentFrame = frame;
         }
     }
 
     constructor(){
         super();
-        // //创建顶层的栈桢
-        // this.currentFrame = new StackFrame();
-        // this.callStack.push(this.currentFrame);
     }
 
     visitProg(prog:Prog, additional:any):any{
@@ -215,7 +207,7 @@ class Intepretor extends AstVisitor{
             for (let i = 0; i< params.length; i++){
                 let variableDecl = params[i];
                 let val = this.visit(args[i]);
-                frame.values.set(variableDecl.sym as Symbol, val);  //设置到新的frame里。
+                frame.data.set(variableDecl.sym as Symbol, val);  //设置到新的frame里。
             }
         }
 
@@ -228,7 +220,7 @@ class Intepretor extends AstVisitor{
                 let classSym = functionSym.classSym;
                 if (classSym){
                     let playObject = this.getVariableValue(classSym);
-                    frame.values.set(functionSym.classSym as ClassSymbol, playObject); //设置成父类的ClassSymbol，便于被this来引用
+                    frame.data.set(functionSym.classSym as ClassSymbol, playObject); //设置成父类的ClassSymbol，便于被this来引用
                 }
                 else{
                     console.log("Runtime error: can not find enclosing class for super().");
@@ -238,7 +230,7 @@ class Intepretor extends AstVisitor{
                 let classSym = functionSym.classSym;
                 if (classSym && classSym instanceof ClassSymbol){
                     newObject = new PlayObject(classSym);
-                    frame.values.set(classSym, newObject);
+                    frame.data.set(classSym, newObject);
                 }
                 else{
                     console.log("Runtime error: cannot find class symbol for 'this'.");
@@ -247,7 +239,7 @@ class Intepretor extends AstVisitor{
         }
         else if (functionSym.functionKind == FunctionKind.Method){
             if (obj && obj instanceof PlayObject){
-                frame.values.set(obj.classSym, obj);   //todo 这个地方修改一下，用additional参数往下传
+                frame.data.set(obj.classSym, obj);   //todo 这个地方修改一下，用additional参数往下传
 
                 //动态绑定：重新确定用哪个FunctionDecl
                 let functionSym = obj.classSym.getMethodCascade(functionName);
@@ -268,7 +260,6 @@ class Intepretor extends AstVisitor{
         this.pushFrame(frame);
 
         //4.执行函数
-        //如果有闭包，或者
         this.visit(functionDecl.body, obj);   //往下传ClosureObject或PlayObject         
 
         //5.弹出当前的栈桢
@@ -341,20 +332,26 @@ class Intepretor extends AstVisitor{
     visitVariable(v:Variable, obj:any):any{
         if (v.isLeftValue){
             if (obj instanceof ClosureObject){
-                //检查当前栈桢里有没有var.sym
-                if (this.currentFrame.values.has(v.sym as VarSymbol)){
-                    return v.sym;
-                }
-                //返回左值，闭包对象中的属性
-                else if(obj.data.has(v.sym as VarSymbol)){
+                //从当前栈桢和前面的栈桢去查找
+                let ref = this.findSymbolInStackCascade(this.currentFrame, v.sym as Symbol);
+                
+                //返回闭包中的值
+                if(!ref && obj.data.has(v.sym as VarSymbol)){
                     return new ObjectPropertyRef(obj, v.sym as Symbol);
                 }
                 else{
-                    console.log("Value of '" + (v.sym as Symbol).name + "' cannot be found in stack frame or closure.");
+                    console.log("Runtime error, cannot found variable '"+v.name+"' from stack frame and clojure.");
                 }
             }
             else{
-                return v.sym;
+                //从当前栈桢和前面的栈桢去查找
+                let ref = this.findSymbolInStackCascade(this.currentFrame, v.sym as Symbol);
+
+                if (!ref){
+                    console.log("Runtime error, cannot found variable '"+v.name+"' from stack frame and clojure.");
+                }
+
+                return ref;
             }
         }
         else{
@@ -370,11 +367,38 @@ class Intepretor extends AstVisitor{
                 return closureObj;
             }
             else if (v.sym instanceof VarSymbol){
-                let value = this.getVariableValue(v.sym);
-                if (!value && obj instanceof ClosureObject){
-                    value = obj.data.get(v.sym);
+                //从当前栈桢和前面的栈桢去查找
+                let ref = this.findSymbolInStackCascade(this.currentFrame, v.sym as Symbol);
+
+                if (!ref && obj instanceof ClosureObject){
+                    ref = new ObjectPropertyRef(obj, v.sym as Symbol);
                 }
-                return value;
+
+                if (ref){
+                    return this.getVariableValue(ref);
+                }
+
+                // let value = this.getVariableValue(v.sym);
+                // if (!value && obj instanceof ClosureObject){
+                //     value = obj.data.get(v.sym);
+                // }
+                // return value;
+            }
+        }
+    }
+
+    //在栈中找到其他作用域中的变量
+    private findSymbolInStackCascade(frame:StackFrame, left:Symbol):ObjectPropertyRef|null{
+        if (frame.data.has(left)){
+            return new ObjectPropertyRef(frame, left);
+        }
+        else{
+            let index = this.callStack.indexOf(frame);
+            if (index > 0){
+                return this.findSymbolInStackCascade(this.callStack[index -1], left);
+            }
+            else{
+                return null;
             }
         }
     }
@@ -425,14 +449,14 @@ class Intepretor extends AstVisitor{
         else if (leftValue instanceof ArrayElementRef){
             // return this.getArrayElementValue(leftValue); todo
         }
-        else{
-            return this.currentFrame.values.get(leftValue);
+        else{ //变量等。
+            return this.currentFrame.data.get(leftValue);
         }
     }
 
     private setVariableValue(left:LeftValue, right:any):any{
         if(left instanceof VarSymbol){
-            return this.currentFrame.values.set(left, right);
+            return this.currentFrame.data.set(left, right);
         }
         else if (left instanceof ArrayElementRef){
             return this.setArrayElementValue(left, right);
@@ -449,7 +473,7 @@ class Intepretor extends AstVisitor{
      * @param value 
      */
     private setArrayElementValue(elementAddress:ArrayElementRef, value:any):any{
-        let lastArr = this.currentFrame.values.get(elementAddress.varSym);
+        let lastArr = this.currentFrame.data.get(elementAddress.varSym);
 
         for (let i = 0; i < elementAddress.indices.length -1; i++){  //遍历前length-1个元素
             lastArr = (lastArr as [])[i];
@@ -596,6 +620,23 @@ abstract class DataObject{
     data:Map<Symbol,any> = new Map();
 }
 
+/**
+ * 栈桢
+ * 每个函数对应一级栈桢.
+ */
+class StackFrame extends DataObject{
+    //返回值，当调用函数的时候，返回值放在这里
+    retVal:any = undefined;
+
+    //产生当前栈桢的函数
+    functionSym:FunctionSymbol;
+
+    constructor(functionSym:FunctionSymbol){
+        super();
+        this.functionSym = functionSym;
+    }
+}
+
 //存储一个对象的数据
 class PlayObject extends DataObject{
     classSym:ClassSymbol;
@@ -635,38 +676,6 @@ class ArrayElementRef{
     constructor(varSym:VarSymbol, indices:number[]){
         this.varSym = varSym;
         this.indices = indices;
-    }
-}
-
-
-
-// /**
-//  * 左值。
-//  * 目前先只是指变量。
-//  */
-// class LeftValue{
-//     variable:VarSymbol;
-//     constructor(variable:VarSymbol){
-//         this.variable = variable;
-//     }
-// }
-
-/**
- * 栈桢
- * 每个函数对应一级栈桢.
- */
-class StackFrame{
-    //存储变量的值
-    values:Map<Symbol, any> = new Map();
-    
-    //返回值，当调用函数的时候，返回值放在这里
-    retVal:any = undefined;
-
-    //产生当前栈桢的函数
-    functionSym:FunctionSymbol;
-
-    constructor(functionSym:FunctionSymbol){
-        this.functionSym = functionSym;
     }
 }
 
