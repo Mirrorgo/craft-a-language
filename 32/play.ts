@@ -27,26 +27,38 @@ class Intepretor extends AstVisitor{
     callStack: StackFrame[] = [];
 
     //当前栈桢
-    currentFrame: StackFrame;
+    // _currentFrame: StackFrame|null = null;
+
+    get currentFrame():StackFrame{
+        return this.callStack[this.callStack.length-1];
+    }
 
     private pushFrame(frame:StackFrame){
         this.callStack.push(frame);
-        this.currentFrame = frame;
+        // this.currentFrame = frame;
     }
 
     private popFrame(){
         if (this.callStack.length>1){
-            let frame = this.callStack[this.callStack.length-2];
+            // let frame = this.callStack[this.callStack.length-2];
             this.callStack.pop();
-            this.currentFrame = frame;
+            // this.currentFrame = frame;
         }
     }
 
     constructor(){
         super();
+        // //创建顶层的栈桢
+        // this.currentFrame = new StackFrame();
+        // this.callStack.push(this.currentFrame);
+    }
+
+    visitProg(prog:Prog):any{
         //创建顶层的栈桢
-        this.currentFrame = new StackFrame();
-        this.callStack.push(this.currentFrame);
+        this.callStack.push(new StackFrame(prog.sym as FunctionSymbol));
+
+        //去执行block的代码
+        super.visitProg(prog);
     }
 
     //函数声明不做任何事情。
@@ -185,7 +197,7 @@ class Intepretor extends AstVisitor{
         this.currentFrame.retVal = undefined;
 
         //1.创建新栈桢
-        let frame = new StackFrame();
+        let frame = new StackFrame(functionSym);
 
         //2.计算参数值，并保存到新创建的栈桢
         let functionDecl = functionSym.decl as FunctionDecl;
@@ -568,6 +580,14 @@ class ObjectPropertyRef{
     }
 }
 
+//闭包对象
+class ClosureObject{
+    functionSym:FunctionSymbol;
+    data:Map<Symbol,any> = new Map();
+    constructor(functionSym:FunctionSymbol){
+        this.functionSym = functionSym;
+    }
+}
 
 
 // /**
@@ -591,6 +611,13 @@ class StackFrame{
     
     //返回值，当调用函数的时候，返回值放在这里
     retVal:any = undefined;
+
+    //产生当前栈桢的函数
+    functionSym:FunctionSymbol;
+
+    constructor(functionSym:FunctionSymbol){
+        this.functionSym = functionSym;
+    }
 }
 
 /**

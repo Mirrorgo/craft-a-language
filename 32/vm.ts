@@ -1403,7 +1403,7 @@ export class BCModuleReader{
             paramTypes.push(this.readString(bc));
         }
 
-        let t = new FunctionType(SysTypes.Any,[], typeName);
+        let t = new FunctionType(SysTypes.Any,[]);
         this.types.set(typeName, t);
         this.typeInfos.set(typeName, {returnType:returnType, paramTypes:paramTypes});
     }

@@ -182,7 +182,6 @@ class TypeResolver extends SemanticAstVisitor{
             }
             else{
                 this.addError("Unknow type '" + classDecl.superClass + "'", classDecl);
-                console.log(prog.name2Type);
             }
         }
 
@@ -502,7 +501,7 @@ class RefResolver extends SemanticAstVisitor{
 
                 functionCall.theType = sym.theType;   //修改类型为class
 
-                sym = sym.constructor_;  //修改FunctionSymbole为自己的constructor
+                sym = sym.constructor_;  //修改FunctionSymbol为自己的constructor
                 
                 if (!sym){
                     this.addError("Can not find constructor for class '" + className + "' .",functionCall);
@@ -520,7 +519,6 @@ class RefResolver extends SemanticAstVisitor{
                 }
                 else{
                     this.addError("'" + sym.name + "' should be of FunctionType.", functionCall);
-                    console.log(sym);
                     functionCall.theType = SysTypes.Any;   //todo: 这里以后是否需要修改？
                 }
             }
@@ -532,6 +530,12 @@ class RefResolver extends SemanticAstVisitor{
 
         //遍历下级节点，主要是参数。
         super.visitFunctionCall(functionCall);
+
+        //做闭包分析
+        //当返回值是函数时
+        if (functionCall.theType instanceof FunctionType){
+            
+        }
     }
 
     /**
@@ -1797,18 +1801,21 @@ class AssignAnalyzer extends SemanticAstVisitor{
     }
 
     //检查变量使用前是否被赋值了
+    //注意：variable的sym是有可能是FunctionSymbol的，但不可能出现在赋值符号左侧，因为这个时候它指向的都是函数名称。
     visitVariable(variable: Variable):any{
-        let varSym = variable.sym as VarSymbol;
-        if (this.assignMode.has(varSym)){
-            let assigned = this.assignMode.get(varSym) as boolean;
-            if (!assigned){
-                if (!(variable.parentNode instanceof DotExp)){  //对于点符号表达式，不去考虑。
-                    this.addError("variable '" + variable.name + "' is used before being assigned.", variable);
+        if (variable.sym instanceof VarSymbol){
+            let varSym = variable.sym as VarSymbol;
+            if (this.assignMode.has(varSym)){
+                let assigned = this.assignMode.get(varSym) as boolean;
+                if (!assigned){
+                    if (!(variable.parentNode instanceof DotExp)){  //对于点符号表达式，不去考虑。
+                        this.addError("variable '" + variable.name + "' is used before being assigned.", variable);
+                    }
                 }
             }
-        }
-        else{
-            console.log("whoops,不可能到这里@semantic.ts/visitVariable");
+            else{
+                console.log("whoops,不可能到这里@semantic.ts/visitVariable");
+            }
         }
     }
 

@@ -12,6 +12,7 @@ var TypeKind;
     TypeKind[TypeKind["Intersection"] = 3] = "Intersection";
     TypeKind[TypeKind["Function"] = 4] = "Function";
     TypeKind[TypeKind["ComplementNamed"] = 5] = "ComplementNamed";
+    TypeKind[TypeKind["Array"] = 6] = "Array";
 })(TypeKind = exports.TypeKind || (exports.TypeKind = {}));
 ;
 class TypeUtil {
@@ -96,8 +97,19 @@ class TypeUtil {
                     rtn = false;
                 }
                 break;
+            case TypeKind.Array:
+                if (t2.kind == TypeKind.Array) {
+                    return TypeUtil.LE_A_A(t1, t2);
+                }
+                else {
+                    rtn = false;
+                }
+                break;
         }
         return rtn;
+    }
+    static LE_A_A(t1, t2) {
+        return TypeUtil.LE(t1.baseType, t2.baseType);
     }
     static LE_T_T(t1, t2) {
         if (t1.paramTypes.length == t2.paramTypes.length) {
@@ -632,7 +644,11 @@ class TypeUtil {
                 rtn = t.kind == TypeKind.Union ? new IntersectionType(types) : new UnionType(types);
                 break;
             case TypeKind.Function:
-                rtn = SysTypes.Never;
+                let ft = t;
+                rtn = new FunctionType(ft.returnType, ft.paramTypes, true);
+                break;
+            case TypeKind.Array:
+                rtn = new ArrayType(t.baseType, true);
                 break;
             default:
                 const _exhaustiveCheck = t.kind;
@@ -1155,6 +1171,9 @@ class TypeUtil {
         else if (t instanceof FunctionType) {
             theType = t;
         }
+        else if (t instanceof ArrayType) {
+            theType = t;
+        }
         else if (t instanceof ValueType) {
             if (t !== SysTypes.Null || t !== SysTypes.Undefined) { //null和undefined不需要改变
                 theType = t.typeOfValue;
@@ -1375,7 +1394,7 @@ exports.ValueType = ValueType;
 //数组类型
 class ArrayType extends Type {
     constructor(baseType, isComplement = false) {
-        super(TypeKind.Value);
+        super(TypeKind.Array);
         this.baseType = baseType;
         this.isComplement = isComplement;
     }
@@ -1393,10 +1412,11 @@ class ArrayType extends Type {
 exports.ArrayType = ArrayType;
 //todo: 需要检查循环引用
 class FunctionType extends Type {
-    constructor(returnType = SysTypes.Void, paramTypes = [], name = undefined) {
+    constructor(returnType = SysTypes.Void, paramTypes = [], isComplement = false) {
         super(TypeKind.Function);
         this.returnType = returnType;
         this.paramTypes = paramTypes;
+        this.isComplement = isComplement;
     }
     hasVoid() {
         return this.returnType.hasVoid();

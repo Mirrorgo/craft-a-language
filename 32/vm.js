@@ -1271,7 +1271,7 @@ class BCModuleReader {
         for (let i = 0; i < numParams; i++) {
             paramTypes.push(this.readString(bc));
         }
-        let t = new types_1.FunctionType(types_1.SysTypes.Any, [], typeName);
+        let t = new types_1.FunctionType(types_1.SysTypes.Any, []);
         this.types.set(typeName, t);
         this.typeInfos.set(typeName, { returnType: returnType, paramTypes: paramTypes });
     }

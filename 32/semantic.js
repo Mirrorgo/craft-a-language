@@ -163,7 +163,6 @@ class TypeResolver extends SemanticAstVisitor {
             }
             else {
                 this.addError("Unknow type '" + classDecl.superClass + "'", classDecl);
-                console.log(prog.name2Type);
             }
         }
         let theType = new types_1.NamedType(classDecl.name, upperTypes);
@@ -452,7 +451,6 @@ class RefResolver extends SemanticAstVisitor {
                 }
                 else {
                     this.addError("'" + sym.name + "' should be of FunctionType.", functionCall);
-                    console.log(sym);
                     functionCall.theType = types_1.SysTypes.Any; //todo: 这里以后是否需要修改？
                 }
             }
@@ -1593,18 +1591,21 @@ class AssignAnalyzer extends SemanticAstVisitor {
     }
     //检查变量使用前是否被赋值了
     visitVariable(variable) {
-        let varSym = variable.sym;
-        if (this.assignMode.has(varSym)) {
-            let assigned = this.assignMode.get(varSym);
-            if (!assigned) {
-                if (!(variable.parentNode instanceof ast_1.DotExp)) { //对于点符号表达式，不去考虑。
-                    this.addError("variable '" + variable.name + "' is used before being assigned.", variable);
+        if (variable.sym instanceof symbol_1.VarSymbol) {
+            let varSym = variable.sym;
+            if (this.assignMode.has(varSym)) {
+                let assigned = this.assignMode.get(varSym);
+                if (!assigned) {
+                    if (!(variable.parentNode instanceof ast_1.DotExp)) { //对于点符号表达式，不去考虑。
+                        this.addError("variable '" + variable.name + "' is used before being assigned.", variable);
+                    }
                 }
             }
+            else {
+                console.log("whoops,不可能到这里@semantic.ts/visitVariable");
+            }
         }
-        else {
-            console.log("whoops,不可能到这里@semantic.ts/visitVariable");
-        }
+        //else if ()  todo
     }
     //处理赋值语句
     visitBinary(binary) {

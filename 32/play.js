@@ -43,20 +43,31 @@ class Intepretor extends ast_1.AstVisitor {
         super();
         //调用栈
         this.callStack = [];
-        //创建顶层的栈桢
-        this.currentFrame = new StackFrame();
-        this.callStack.push(this.currentFrame);
+        // //创建顶层的栈桢
+        // this.currentFrame = new StackFrame();
+        // this.callStack.push(this.currentFrame);
+    }
+    //当前栈桢
+    // _currentFrame: StackFrame|null = null;
+    get currentFrame() {
+        return this.callStack[this.callStack.length - 1];
     }
     pushFrame(frame) {
         this.callStack.push(frame);
-        this.currentFrame = frame;
+        // this.currentFrame = frame;
     }
     popFrame() {
         if (this.callStack.length > 1) {
-            let frame = this.callStack[this.callStack.length - 2];
+            // let frame = this.callStack[this.callStack.length-2];
             this.callStack.pop();
-            this.currentFrame = frame;
+            // this.currentFrame = frame;
         }
+    }
+    visitProg(prog) {
+        //创建顶层的栈桢
+        this.callStack.push(new StackFrame(prog.sym));
+        //去执行block的代码
+        super.visitProg(prog);
     }
     //函数声明不做任何事情。
     visitFunctionDecl(functionDecl) {
@@ -180,7 +191,7 @@ class Intepretor extends ast_1.AstVisitor {
         //清空返回值
         this.currentFrame.retVal = undefined;
         //1.创建新栈桢
-        let frame = new StackFrame();
+        let frame = new StackFrame(functionSym);
         //2.计算参数值，并保存到新创建的栈桢
         let functionDecl = functionSym.decl;
         if (functionDecl.callSignature.paramList != null) {
@@ -538,11 +549,12 @@ class ObjectPropertyRef {
  * 每个函数对应一级栈桢.
  */
 class StackFrame {
-    constructor() {
+    constructor(functionSym) {
         //存储变量的值
         this.values = new Map();
         //返回值，当调用函数的时候，返回值放在这里
         this.retVal = undefined;
+        this.functionSym = functionSym;
     }
 }
 /**

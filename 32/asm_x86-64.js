@@ -304,17 +304,20 @@ class VarOprand extends Oprand {
     }
 }
 class FunctionOprand extends Oprand {
-    constructor(functionSym, args, functionAddress = null) {
-        super(OprandKind.function, functionSym);
+    constructor(functionType, args, functionName = null, functionAddress = null, isConstructorOrMethod = false) {
+        super(OprandKind.function, undefined);
         this.args = args;
+        this.functionType = functionType;
         this.functionAddress = functionAddress;
+        this.functionName = functionName;
+        this.isMethodOrConstructor = isConstructorOrMethod;
     }
-    get functionSym() {
-        return this.value;
-    }
-    get functionType() {
-        return this.functionSym.theType;
-    }
+    // get functionSym():FunctionSymbol|null{
+    //     return this.value as FunctionSymbol;
+    // }
+    // get functionType():FunctionType{
+    //     return this.functionSym.theType as FunctionType;
+    // }    
     //在lower以后，args就会被清空，toString()会生成正确的函数标签。
     toString() {
         let strArgs = "";
@@ -330,7 +333,9 @@ class FunctionOprand extends Oprand {
         if (this.functionAddress) {
             return "*" + this.functionAddress.toString();
         }
-        return "_" + this.functionSym.fullName + strArgs;
+        else {
+            return "_" + this.functionName + strArgs;
+        }
     }
 }
 //条件语句产生的Oprand，里面记录了比较操作符的类型，以及数据类型（用于确定具体的跳转指令）
@@ -1243,12 +1248,33 @@ class AsmGenerator extends ast_1.AstVisitor {
     // }
     visitVariable(variable) {
         if (this.s.functionSym != null && variable.sym != null) {
-            let varIndex = this.s.functionSym.vars.indexOf(variable.sym);
-            //如果是对象内部的方法或构造方法，要把0号变量给对象引用
-            if (this.s.functionSym.classSym) {
-                varIndex += 1;
+            if (variable.sym instanceof symbol_1.VarSymbol) {
+                let varIndex = this.s.functionSym.vars.indexOf(variable.sym);
+                //如果是对象内部的方法或构造方法，要把0号变量给对象引用
+                if (this.s.functionSym.classSym) {
+                    varIndex += 1;
+                }
+                return new VarOprand(varIndex, variable.name, getCpuDataType(variable.theType));
             }
-            return new VarOprand(varIndex, variable.name, getCpuDataType(variable.theType));
+            /*
+             * 处理变量是一个函数名称的情况。
+             * 场景：
+             *
+             * function sum(prev:number, cur:number):number{
+             *   return prev + cur;
+             * }
+             * let fun:(prev:number,cur:number)=>number = sum;
+             *
+             * 这个时候，变量sum的Symbol就是FunctionSymbol.
+             *
+             * 算法：基于FunctionSymbol，获取函数的标签，并加载到一个临时变量中。
+             */
+            else if (variable.sym instanceof symbol_1.FunctionSymbol) {
+                let label = "_" + variable.sym.fullName;
+                let tempVar = this.allocateTempVar(CpuDataType.int64);
+                this.getCurrentBB().insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), new Oprand(OprandKind.label, label), tempVar));
+                return tempVar;
+            }
         }
     }
     visitIntegerLiteral(integerLiteral) {
@@ -1423,28 +1449,54 @@ class AsmGenerator extends ast_1.AstVisitor {
             let oprand = this.visit(arg);
             args.push(oprand);
         }
-        let functionSym = functionCall.sym;
-        //内置函数
-        if (symbol_1.built_ins.has(functionCall.name)) {
-            functionSym = this.getBuiltInFunctionSym(functionCall.name, functionCall.arguments.length > 0 ? functionCall.arguments[0].theType : null);
-        }
-        //看看是不是尾递归或尾调用
         let isTailCall = false;
         let isTailRecursive = false;
-        if (this.tailAnalysisResult != null) {
-            if (this.tailAnalysisResult.tailRecursives.indexOf(functionCall) != -1) {
-                isTailRecursive = true;
+        let functionSym = null;
+        if (functionCall.sym instanceof symbol_1.FunctionSymbol) {
+            functionSym = functionCall.sym;
+            //内置函数
+            if (symbol_1.built_ins.has(functionCall.name)) {
+                functionSym = this.getBuiltInFunctionSym(functionCall.name, functionCall.arguments.length > 0 ? functionCall.arguments[0].theType : null);
             }
-            else if (this.tailAnalysisResult.tailCalls.indexOf(functionCall) != -1) {
-                isTailCall = true;
+            //看看是不是尾递归或尾调用
+            if (this.tailAnalysisResult != null) {
+                if (this.tailAnalysisResult.tailRecursives.indexOf(functionCall) != -1) {
+                    isTailRecursive = true;
+                }
+                else if (this.tailAnalysisResult.tailCalls.indexOf(functionCall) != -1) {
+                    isTailCall = true;
+                }
             }
         }
-        return this.processFunctionCall(functionSym, args, isTailCall, isTailRecursive, obj);
+        //函数变量
+        else if (functionCall.sym instanceof symbol_1.VarSymbol && this.s.functionSym) {
+            let varSym = functionCall.sym;
+            //获取变量的值，该值应该是一个函数的地址
+            let varIndex = this.s.functionSym.vars.indexOf(varSym);
+            //如果是对象内部的方法或构造方法，要把0号变量给对象引用
+            if (this.s.functionSym.classSym) {
+                varIndex += 1;
+            }
+            let functionAddressVar = new VarOprand(varIndex, varSym.name, getCpuDataType(varSym.theType));
+            let functionAddress = new MemAddress(functionAddressVar, 0);
+            let insts = this.getCurrentBB().insts;
+            console_1.assert(varSym.theType instanceof types_1.FunctionType, "函数变量的类型应该是FunctionType");
+            let functionType = varSym.theType;
+            insts.push(new Inst_1(OpCode.callq, new FunctionOprand(functionType, args, null, functionAddress)));
+            return this.getFuncitonCallResult(functionType);
+        }
+        if (functionSym) {
+            return this.processFunctionCall(functionSym, args, isTailCall, isTailRecursive, obj);
+        }
+        else {
+            //理论上不会发生
+            console.log("Runtime error: FunctionCall '" + functionCall.name + "' can not find it's definition.");
+            return undefined;
+        }
     }
     processFunctionCall(functionSym, args, isTailCall, isTailRecursive, obj) {
         var _a, _b;
         let insts = this.getCurrentBB().insts;
-        let functionType = functionSym.theType;
         let functionAddress = null;
         //调用Constructor
         let newObject = null;
@@ -1463,8 +1515,8 @@ class AsmGenerator extends ast_1.AstVisitor {
                 insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), vtable, tempVar));
                 insts.push(new Inst_2(OpCodeUtil.movOp(CpuDataType.int64), tempVar, objHeader));
                 //把对象作为第一个参数传给构造方法
-                console.log("\n~~~@####newObject");
-                console.log(newObject);
+                // console.log("\n~~~@####newObject");
+                // console.log(newObject);
                 args.unshift(newObject);
             }
         }
@@ -1489,22 +1541,12 @@ class AsmGenerator extends ast_1.AstVisitor {
         else if (isTailCall) {
             op = OpCode.tailCall;
         }
-        insts.push(new Inst_1(op, new FunctionOprand(functionSym, args, functionAddress)));
+        insts.push(new Inst_1(op, new FunctionOprand(functionSym.theType, args, functionSym.name, functionAddress, functionSym.isMethodOrConstructor)));
         //把返回值拷贝到一个临时变量，并返回这个临时变量
         //并且要重新装载溢出的变量        
         let rtn;
         if (!isTailCall && !isTailRecursive) {
-            //把结果放到一个新的临时变量里
-            let dest = undefined;
-            if (functionType.returnType != types_1.SysTypes.Void) { //函数有返回值时
-                let dataType = getCpuDataType(functionType.returnType);
-                dest = this.allocateTempVar(dataType); //必须要创建一个变量，因为返回值的寄存器并没有对应一个变量
-                insts.push(new Inst_2(OpCodeUtil.movOp(dataType), Register.returnReg(dataType), dest));
-            }
-            //调用函数完毕以后，要重新装载被Spilled的变量
-            //这个动作要在获取返回值之后
-            insts.push(new Inst_0(OpCode.reload));
-            rtn = dest;
+            rtn = this.getFuncitonCallResult(functionSym.theType);
         }
         //对于尾递归和尾调用，不需要处理返回值，也不需要做变量的溢出和重新装载
         else {
@@ -1519,7 +1561,8 @@ class AsmGenerator extends ast_1.AstVisitor {
             return rtn;
         }
     }
-    postFunctionCall(insts, functionType) {
+    getFuncitonCallResult(functionType) {
+        let insts = this.getCurrentBB().insts;
         //把结果放到一个新的临时变量里
         let dest = undefined;
         if (functionType.returnType != types_1.SysTypes.Void) { //函数有返回值时
@@ -1532,6 +1575,19 @@ class AsmGenerator extends ast_1.AstVisitor {
         insts.push(new Inst_0(OpCode.reload));
         return dest;
     }
+    // postFunctionCall(insts:Inst[], functionType:FunctionType):any{
+    //     //把结果放到一个新的临时变量里
+    //     let dest:Oprand|undefined = undefined; 
+    //     if(functionType.returnType != SysTypes.Void){ //函数有返回值时
+    //         let dataType = getCpuDataType(functionType.returnType);
+    //         dest = this.allocateTempVar(dataType);  //必须要创建一个变量，因为返回值的寄存器并没有对应一个变量
+    //         insts.push(new Inst_2(OpCodeUtil.movOp(dataType), Register.returnReg(dataType), dest));
+    //     }
+    //     //调用函数完毕以后，要重新装载被Spilled的变量
+    //     //这个动作要在获取返回值之后
+    //     insts.push(new Inst_0(OpCode.reload));
+    //     return dest;
+    // }
     visitThisExp(thisExp) {
         return this.ThisOprand;
     }
@@ -1656,10 +1712,10 @@ class Lower {
                     bb.insts.push(new Inst_1(OpCode.jmp, new Oprand(OprandKind.bb, bbEndPoint), lastInst.comment));
                     lastInst.op = OpCode.jmp;
                     this.addEpilogue(bbEndPoint.insts, lastInst);
-                    console.log("bbEndPoint");
-                    for (let inst of bbEndPoint.insts) {
-                        console.log(inst);
-                    }
+                    // console.log("bbEndPoint");
+                    // for (let inst of bbEndPoint.insts){
+                    //     console.log(inst);
+                    // }
                 }
             }
         }
@@ -1867,14 +1923,6 @@ class Lower {
             //两个操作数
             if (Inst_2.isInst_2(inst)) {
                 let inst_2 = inst;
-                if (!inst_2.oprand1) {
-                    console.log("!!!!!");
-                    console.log(inst_2);
-                }
-                if (!inst_2.oprand2) {
-                    console.log("!!!!!----");
-                    console.log(inst_2);
-                }
                 inst_2.comment = inst_2.toString();
                 inst_2.oprand1 = this.lowerOprand(liveVars, inst_2.oprand1, newInsts);
                 inst_2.oprand2 = this.lowerOprand(liveVars, inst_2.oprand2, newInsts);
@@ -1886,10 +1934,6 @@ class Lower {
             //1个操作数
             else if (Inst_1.isInst_1(inst)) {
                 let inst_1 = inst;
-                if (!inst_1.oprand) {
-                    console.log("!!!!!---ddddd-");
-                    console.log(inst_1);
-                }
                 inst_1.oprand = this.lowerOprand(liveVars, inst_1.oprand, newInsts);
                 if (inst.op != OpCode.declVar) { //忽略变量声明的伪指令。
                     //处理函数调用
@@ -1964,10 +2008,10 @@ class Lower {
         let regsSpilled = [];
         for (let j = 0; j < numArgs; j++) {
             let paramIndex = j;
-            if (functionOprand.functionSym.isMethodOrConstructor)
+            if (functionOprand.isMethodOrConstructor)
                 paramIndex -= 1;
             let dataType;
-            if (functionOprand.functionSym.isMethodOrConstructor && j == 0) {
+            if (functionOprand.isMethodOrConstructor && j == 0) {
                 dataType = CpuDataType.int64; //对象地址
             }
             else {
@@ -2570,6 +2614,9 @@ function getCpuDataType(t) {
         dataType = CpuDataType.double;
     }
     else if (t instanceof types_1.NamedType) { //自定义对象
+        dataType = CpuDataType.int64;
+    }
+    else if (t instanceof types_1.FunctionType) {
         dataType = CpuDataType.int64;
     }
     else {

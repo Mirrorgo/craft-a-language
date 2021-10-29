@@ -4,7 +4,7 @@
 
 import { Console } from "console";
 
-export enum TypeKind {Named, Value, Union, Intersection, Function, ComplementNamed};
+export enum TypeKind {Named, Value, Union, Intersection, Function, ComplementNamed, Array};
 
 export class TypeUtil{
     
@@ -90,9 +90,21 @@ export class TypeUtil{
                     rtn = false;
                 }
                 break;
+            case TypeKind.Array:
+                if(t2.kind == TypeKind.Array){
+                    return TypeUtil.LE_A_A(t1 as ArrayType, t2 as ArrayType);
+                }
+                else{
+                    rtn = false;
+                }
+                break;
         }
 
         return rtn;
+    }
+
+    private static LE_A_A(t1:ArrayType, t2:ArrayType):boolean{
+        return TypeUtil.LE(t1.baseType, t2.baseType);
     }
 
     private static LE_T_T(t1: FunctionType, t2: FunctionType):boolean{
@@ -671,7 +683,11 @@ export class TypeUtil{
                 rtn =  t.kind == TypeKind.Union ? new IntersectionType(types) :  new UnionType(types);
                 break;
             case TypeKind.Function:
-                rtn = SysTypes.Never;
+                let ft = t as FunctionType;
+                rtn = new FunctionType(ft.returnType,ft.paramTypes,true);
+                break;
+            case TypeKind.Array:
+                rtn = new ArrayType((t as ArrayType).baseType, true);
                 break;
             default:
                 const _exhaustiveCheck: never = t.kind;
@@ -1230,6 +1246,9 @@ export class TypeUtil{
         else if (t instanceof FunctionType){
             theType = t;
         }
+        else if (t instanceof ArrayType){
+            theType = t;
+        }
         else if (t instanceof ValueType){
             if(t !== SysTypes.Null || t !== SysTypes.Undefined){ //null和undefined不需要改变
                 theType = t.typeOfValue;
@@ -1493,7 +1512,7 @@ export class ArrayType extends Type{
     isComplement:boolean;
 
     constructor(baseType:Type, isComplement:boolean = false){
-        super(TypeKind.Value);
+        super(TypeKind.Array);
         this.baseType = baseType;
         this.isComplement = isComplement;
     }
@@ -1516,11 +1535,13 @@ export class ArrayType extends Type{
 export class FunctionType extends Type{
     returnType:Type;    //返回值类型
     paramTypes:Type[];  //参数的类型
+    isComplement:boolean;
     static index:number = 0; //序号，用于给函数类型命名
-    constructor(returnType:Type = SysTypes.Void, paramTypes:Type[]=[], name:string|undefined = undefined){
+    constructor(returnType:Type = SysTypes.Void, paramTypes:Type[]=[], isComplement:boolean = false){
         super(TypeKind.Function); 
         this.returnType = returnType;
         this.paramTypes = paramTypes;
+        this.isComplement = isComplement;
     }    
 
     hasVoid():boolean{

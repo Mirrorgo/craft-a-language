@@ -438,6 +438,9 @@ class Parser {
                     rtn = this.parseUnionOrIntersectionOrPrimaryType();
                 }
             }
+            else if (t2.code == scanner_1.Seperator.CloseParen) { //参数列表为空的情况，比如 ()=>number
+                rtn = this.parseFunctionType();
+            }
             else {
                 rtn = this.parseUnionOrIntersectionOrPrimaryType();
             }
@@ -451,8 +454,6 @@ class Parser {
         let beginPos = this.scanner.getNextPos();
         this.scanner.next(); //跳过'('
         let paramList = this.parseParameterList();
-        console.log("\nparamList");
-        console.log(paramList);
         let t = this.scanner.peek();
         if (t.code == scanner_1.Seperator.CloseParen) {
             this.scanner.next(); //跳过‘)’
