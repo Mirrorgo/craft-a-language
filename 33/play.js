@@ -95,9 +95,6 @@ class Intepretor extends ast_1.AstVisitor {
     visitReturnStatement(returnStatement, additional) {
         let retVal;
         if (returnStatement.exp != null) {
-            if (additional) {
-                console.log("obj is found in visitReturnStatement");
-            }
             retVal = this.visit(returnStatement.exp, additional);
             this.setReturnValue(retVal);
         }
@@ -173,10 +170,10 @@ class Intepretor extends ast_1.AstVisitor {
         }
         else if (functionCall.sym instanceof symbol_1.VarSymbol) {
             //函数类型的变量，可以从帧中取出一个FunctionSymbol类型的值。
-            console.log("\nfunctionCall:" + functionCall.sym.name);
+            // console.log("\nfunctionCall:" + functionCall.sym.name);
             let value = this.getVariableValue(functionCall.sym);
             if (value instanceof ClosureObject) {
-                console.log("ClosureObject!");
+                // console.log("ClosureObject!");
                 functionSym = value.functionSym;
                 obj = value; //把闭包对象传下去
             }
@@ -324,18 +321,25 @@ class Intepretor extends ast_1.AstVisitor {
      * @param v
      */
     visitVariable(v, obj) {
-        if (obj instanceof ClosureObject) {
-            console.log("\nvisitVariable, we meet ClousreObject");
-            console.log("v.sym.name=" + v.sym.name);
-            if (v.isLeftValue)
-                console.log("why left value?");
-        }
         if (v.isLeftValue) {
-            return v.sym;
+            if (obj instanceof ClosureObject) {
+                //检查当前栈桢里有没有var.sym
+                if (this.currentFrame.values.has(v.sym)) {
+                    return v.sym;
+                }
+                //返回左值，闭包对象中的属性
+                else if (obj.data.has(v.sym)) {
+                    return new ObjectPropertyRef(obj, v.sym);
+                }
+                else {
+                    console.log("Value of '" + v.sym.name + "' cannot be found in stack frame or closure.");
+                }
+            }
+            else {
+                return v.sym;
+            }
         }
         else {
-            if (obj instanceof ClosureObject)
-                console.log("\nvisitVariable11, we meet ClousreObject, again");
             //如果返回的是FunctionSym，要把闭包的值打包进去
             if (v.sym instanceof symbol_1.FunctionSymbol) {
                 let closureObj = new ClosureObject(v.sym);
@@ -348,8 +352,6 @@ class Intepretor extends ast_1.AstVisitor {
                 return closureObj;
             }
             else if (v.sym instanceof symbol_1.VarSymbol) {
-                console.log("Whoops!2, and obj is:");
-                console.log(obj);
                 let value = this.getVariableValue(v.sym);
                 if (!value && obj instanceof ClosureObject) {
                     value = obj.data.get(v.sym);
@@ -391,16 +393,30 @@ class Intepretor extends ast_1.AstVisitor {
      *
      * 这个时候，变量sum的Symbol就是FunctionSymbol.
      */
-    getVariableValue(sym) {
-        if (sym instanceof symbol_1.FunctionSymbol) {
-            return sym;
+    getVariableValue(leftValue) {
+        if (leftValue instanceof symbol_1.FunctionSymbol) {
+            return leftValue;
+        }
+        else if (leftValue instanceof ObjectPropertyRef) {
+            return leftValue.object.data.get(leftValue.prop);
+        }
+        else if (leftValue instanceof ArrayElementRef) {
+            // return this.getArrayElementValue(leftValue); todo
         }
         else {
-            return this.currentFrame.values.get(sym);
+            return this.currentFrame.values.get(leftValue);
         }
     }
-    setVariableValue(sym, value) {
-        return this.currentFrame.values.set(sym, value);
+    setVariableValue(left, right) {
+        if (left instanceof symbol_1.VarSymbol) {
+            return this.currentFrame.values.set(left, right);
+        }
+        else if (left instanceof ArrayElementRef) {
+            return this.setArrayElementValue(left, right);
+        }
+        else if (left instanceof ObjectPropertyRef) {
+            return left.object.data.set(left.prop, right);
+        }
     }
     /**
      * 修改数组元素的值。
@@ -416,9 +432,6 @@ class Intepretor extends ast_1.AstVisitor {
         let index = elementAddress.indices[elementAddress.indices.length - 1]; //取出最后一个元素
         //修改数组中某个元素的值
         return lastArr.splice(index, 1, value);
-    }
-    setObjectPropertyValue(ref, value) {
-        ref.object.data.set(ref.prop, value);
     }
     visitBinary(bi, additional) {
         // console.log("visitBinary:" + bi.op);
@@ -466,15 +479,7 @@ class Intepretor extends ast_1.AstVisitor {
                 ret = v1 || v2;
                 break;
             case scanner_1.Op.Assign: //'='
-                if (v1 instanceof symbol_1.VarSymbol) {
-                    this.setVariableValue(v1, v2);
-                }
-                else if (v1 instanceof ArrayElementRef) {
-                    this.setArrayElementValue(v1, v2);
-                }
-                else if (v1 instanceof ObjectPropertyRef) {
-                    this.setObjectPropertyValue(v1, v2);
-                }
+                this.setVariableValue(v1, v2);
                 break;
             default:
                 console.log("Unsupported binary operation: " + scanner_1.Op[bi.op]);
@@ -487,13 +492,11 @@ class Intepretor extends ast_1.AstVisitor {
      */
     visitUnary(u, additional) {
         let v = this.visit(u.exp, additional);
-        let varSymbol;
         let value;
         switch (u.op) {
             case scanner_1.Op.Inc: //'++'
-                varSymbol = v;
-                value = this.getVariableValue(varSymbol);
-                this.setVariableValue(varSymbol, value + 1);
+                value = this.getVariableValue(v);
+                this.setVariableValue(v, value + 1);
                 if (u.isPrefix) {
                     return value + 1;
                 }
@@ -502,9 +505,8 @@ class Intepretor extends ast_1.AstVisitor {
                 }
                 break;
             case scanner_1.Op.Dec: //'--'
-                varSymbol = v;
-                value = this.getVariableValue(varSymbol);
-                this.setVariableValue(varSymbol, value - 1);
+                value = this.getVariableValue(v);
+                this.setVariableValue(v, value - 1);
                 if (u.isPrefix) {
                     return value - 1;
                 }
@@ -552,19 +554,23 @@ class Intepretor extends ast_1.AstVisitor {
         return exp.constValue;
     }
 }
-//左值，代表数组元素的地址
-//比如对于a[0][1] = 12 这个表达式，varSym是a，indices是[0,1]。
-class ArrayElementRef {
-    constructor(varSym, indices) {
-        this.varSym = varSym;
-        this.indices = indices;
+class DataObject {
+    constructor() {
+        this.data = new Map();
     }
 }
 //存储一个对象的数据
-class PlayObject {
+class PlayObject extends DataObject {
     constructor(classSym) {
-        this.data = new Map();
+        super();
         this.classSym = classSym;
+    }
+}
+//闭包对象
+class ClosureObject extends DataObject {
+    constructor(functionSym) {
+        super();
+        this.functionSym = functionSym;
     }
 }
 //左值，对象属性的引用
@@ -574,11 +580,12 @@ class ObjectPropertyRef {
         this.prop = prop;
     }
 }
-//闭包对象
-class ClosureObject {
-    constructor(functionSym) {
-        this.data = new Map();
-        this.functionSym = functionSym;
+//左值，代表数组元素的地址
+//比如对于a[0][1] = 12 这个表达式，varSym是a，indices是[0,1]。
+class ArrayElementRef {
+    constructor(varSym, indices) {
+        this.varSym = varSym;
+        this.indices = indices;
     }
 }
 // /**

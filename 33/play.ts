@@ -90,9 +90,6 @@ class Intepretor extends AstVisitor{
     visitReturnStatement(returnStatement: ReturnStatement, additional:any):any{
         let retVal:any;
         if (returnStatement.exp != null){
-            if (additional){
-                console.log("obj is found in visitReturnStatement");
-            }
             retVal = this.visit(returnStatement.exp, additional); 
             this.setReturnValue(retVal);
         }
@@ -343,7 +340,22 @@ class Intepretor extends AstVisitor{
      */
     visitVariable(v:Variable, obj:any):any{
         if (v.isLeftValue){
-            return v.sym;
+            if (obj instanceof ClosureObject){
+                //检查当前栈桢里有没有var.sym
+                if (this.currentFrame.values.has(v.sym as VarSymbol)){
+                    return v.sym;
+                }
+                //返回左值，闭包对象中的属性
+                else if(obj.data.has(v.sym as VarSymbol)){
+                    return new ObjectPropertyRef(obj, v.sym as Symbol);
+                }
+                else{
+                    console.log("Value of '" + (v.sym as Symbol).name + "' cannot be found in stack frame or closure.");
+                }
+            }
+            else{
+                return v.sym;
+            }
         }
         else{
             //如果返回的是FunctionSym，要把闭包的值打包进去
@@ -403,17 +415,31 @@ class Intepretor extends AstVisitor{
      * 
      * 这个时候，变量sum的Symbol就是FunctionSymbol.
      */
-    private getVariableValue(sym:Symbol):any{
-        if (sym instanceof FunctionSymbol){
-            return sym;
+    private getVariableValue(leftValue:LeftValue):any{
+        if (leftValue instanceof FunctionSymbol){
+            return leftValue;
+        }
+        else if (leftValue instanceof ObjectPropertyRef){
+            return leftValue.object.data.get(leftValue.prop);
+        }
+        else if (leftValue instanceof ArrayElementRef){
+            // return this.getArrayElementValue(leftValue); todo
         }
         else{
-            return this.currentFrame.values.get(sym);
+            return this.currentFrame.values.get(leftValue);
         }
     }
 
-    private setVariableValue(sym:Symbol, value:any):any{
-        return this.currentFrame.values.set(sym, value);
+    private setVariableValue(left:LeftValue, right:any):any{
+        if(left instanceof VarSymbol){
+            return this.currentFrame.values.set(left, right);
+        }
+        else if (left instanceof ArrayElementRef){
+            return this.setArrayElementValue(left, right);
+        }
+        else if (left instanceof ObjectPropertyRef){
+            return left.object.data.set(left.prop, right);
+        }   
     }
 
     /**
@@ -435,9 +461,6 @@ class Intepretor extends AstVisitor{
         return (lastArr as any[]).splice(index,1,value);
     }
 
-    private setObjectPropertyValue(ref:ObjectPropertyRef, value:any):any{
-        ref.object.data.set(ref.prop, value);
-    }
 
     visitBinary(bi:Binary, additional:any):any{
         // console.log("visitBinary:" + bi.op);
@@ -485,15 +508,7 @@ class Intepretor extends AstVisitor{
                 ret = v1 || v2;
                 break;
             case Op.Assign: //'='
-                if(v1 instanceof VarSymbol){
-                    this.setVariableValue(v1, v2);
-                }
-                else if (v1 instanceof ArrayElementRef){
-                    this.setArrayElementValue(v1, v2);
-                }
-                else if (v1 instanceof ObjectPropertyRef){
-                    this.setObjectPropertyValue(v1, v2);
-                }
+                this.setVariableValue(v1, v2);
                 break;
             default:
                 console.log("Unsupported binary operation: " + Op[bi.op]);
@@ -507,14 +522,12 @@ class Intepretor extends AstVisitor{
      */
     visitUnary(u:Unary, additional:any):any{
         let v = this.visit(u.exp, additional);
-        let varSymbol:VarSymbol;
         let value:any;
         
         switch(u.op){            
             case Op.Inc: //'++'
-                varSymbol = v as VarSymbol;
-                value = this.getVariableValue(varSymbol);
-                this.setVariableValue(varSymbol, value+1);
+                value = this.getVariableValue(v);
+                this.setVariableValue(v, value+1);
                 if (u.isPrefix){
                     return value+1;
                 }
@@ -524,9 +537,8 @@ class Intepretor extends AstVisitor{
                
                 break;
             case Op.Dec: //'--'
-                varSymbol = v as VarSymbol;
-                value = this.getVariableValue(varSymbol);
-                this.setVariableValue(varSymbol, value-1);
+                value = this.getVariableValue(v);
+                this.setVariableValue(v, value-1);
                 if (u.isPrefix){
                     return value-1;
                 }
@@ -580,6 +592,41 @@ class Intepretor extends AstVisitor{
 
 }
 
+abstract class DataObject{
+    data:Map<Symbol,any> = new Map();
+}
+
+//存储一个对象的数据
+class PlayObject extends DataObject{
+    classSym:ClassSymbol;
+    constructor(classSym:ClassSymbol){
+        super();
+        this.classSym = classSym;
+    }
+}
+
+//闭包对象
+class ClosureObject extends DataObject{
+    functionSym:FunctionSymbol;
+    constructor(functionSym:FunctionSymbol){
+        super();
+        this.functionSym = functionSym;
+    }
+}
+
+//各种不同的左值
+type LeftValue = Symbol | ObjectPropertyRef | ObjectPropertyRef;
+
+//左值，对象属性的引用
+class ObjectPropertyRef{
+    object: DataObject;
+    prop:Symbol;
+    constructor(object:DataObject, prop:Symbol){
+        this.object = object;
+        this.prop = prop;
+    }
+}
+
 //左值，代表数组元素的地址
 //比如对于a[0][1] = 12 这个表达式，varSym是a，indices是[0,1]。
 class ArrayElementRef{
@@ -591,33 +638,6 @@ class ArrayElementRef{
     }
 }
 
-//存储一个对象的数据
-class PlayObject{
-    classSym:ClassSymbol;
-    data:Map<Symbol,any> = new Map();
-    constructor(classSym:ClassSymbol){
-        this.classSym = classSym;
-    }
-}
-
-//左值，对象属性的引用
-class ObjectPropertyRef{
-    object: PlayObject;
-    prop:Symbol;
-    constructor(object:PlayObject, prop:Symbol){
-        this.object = object;
-        this.prop = prop;
-    }
-}
-
-//闭包对象
-class ClosureObject{
-    functionSym:FunctionSymbol;
-    data:Map<Symbol,any> = new Map();
-    constructor(functionSym:FunctionSymbol){
-        this.functionSym = functionSym;
-    }
-}
 
 
 // /**

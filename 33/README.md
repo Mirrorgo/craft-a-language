@@ -8,8 +8,9 @@
 
 example_closure.ts   
 测试闭包特性。  
+运行：node play example_closure.ts.
 
-(大家可以先看闭包分析，晚上更新AST解释器~~~)   
+(大家先运行第一个实例程序，晚上的版本可以跑example_closure2.ts~~~)   
 
 #### 环境配置注意事项
 
