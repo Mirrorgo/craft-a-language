@@ -6,11 +6,15 @@
 
 #### 本节的测试程序  
 
-example_closure.ts   
+1.example_closure.ts   
 测试闭包特性。  
 运行：node play example_closure.ts.
 
-(大家先运行第一个实例程序，晚上的版本可以跑example_closure2.ts~~~)   
+2.example_closure2.ts   
+测试更复杂一点的闭包特性。  
+运行：node play example_closure2.ts.
+
+(编译成本地代码版本稍后发布~~~)   
 
 #### 环境配置注意事项
 
