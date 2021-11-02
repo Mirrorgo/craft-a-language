@@ -1,5 +1,6 @@
-function foo() {
-    var ages1 = [8.0, 18.0, 28];
-    ages1[2] = 38;
-    console.log("ages[1]");
-}
+"use strict";
+var a;
+a = 2; //a现在是整型
+console.log(a + 3); //打印出5
+a = "2";
+console.log(a + 3); //打印出字符串"23"

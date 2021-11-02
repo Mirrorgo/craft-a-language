@@ -52,7 +52,7 @@ typedef struct _ListNode{
 
 ////////////////////////////////////////////////////////////////////
 //对外接口
-static Arena* arena; //静态变量，让编译器更容易计算其中的数据字段的地址。
+static Arena* arena = NULL; //静态变量，让编译器更容易计算其中的数据字段的地址。
 
 void* allocFromArena(size_t size);
 void returnToArena(Object* obj);
@@ -60,15 +60,19 @@ void initArena();
 
 //从Arena中申请内存
 Object * PlayAlloc(size_t size){
-    return (void*)malloc(size); 
+    // return (void*)malloc(size); 
+    if(!arena) initArena();
 
-    // if(!arena) initArena();
+    // return allocFromArena(size); 
 
-    // return (void*)allocFromArena(size); 
+    void * obj = allocFromArena(size);
+
+    printf("obj allocated:\t%lu\n",(size_t)obj);
+    return obj;
 }
 
 void PlayFree(Object* obj){
-    // returnToArena(obj);
+    returnToArena(obj);
 }
 
 //////////////////////////////////////////////////////////////////
@@ -96,6 +100,7 @@ void addArenaBlock(){
 }
 
 void initArena(){
+    arena = (Arena *) malloc(sizeof(Arena));
     arena->numBlocks = 0;
     addArenaBlock();
 }
@@ -140,39 +145,49 @@ void* allocFromArenaBlock(ArenaBlock * block, size_t size){
         newNode->size = size+NODE_SIZE;
         newNode->nextNodeOffset = block -> firstNodeOffset;
         block->firstNodeOffset = 0;
-        mem = (void *)(newNode + NODE_SIZE);
+        mem = (void *)((size_t)newNode + NODE_SIZE);
     }
     else{
-        unsigned int currentOffset = block -> firstNodeOffset;
-        ListNode * node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + currentOffset);
+        // printf("pos1\n");
+        unsigned int offset = block -> firstNodeOffset;
+        ListNode * node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + offset);
 
-        while (!mem && node->nextNodeOffset>0){
-            if (node->nextNodeOffset - currentOffset - node->size >= size + NODE_SIZE){
+        while (node->nextNodeOffset>0){
+            if (node->nextNodeOffset - offset - node->size >= size + NODE_SIZE){ //有足够大的自由空间
+
+                // printf("pos2\n");
                 //创建新节点
-                ListNode * newNode = (ListNode *)((size_t)block + sizeof(ArenaBlock) + currentOffset + node->size);
+                ListNode * newNode = (ListNode *)((size_t)block + sizeof(ArenaBlock) + offset + node->size);
                 newNode->size = size+NODE_SIZE;
 
-                //把新节点加入链表
+                //把新节点加入链表，插入两个节点之间
                 newNode->nextNodeOffset = node->nextNodeOffset;
-                node->nextNodeOffset = currentOffset + newNode->size;
-                mem = (void*)(newNode + NODE_SIZE);
+                node->nextNodeOffset = offset + node->size;
+                mem = (void*)((size_t)newNode + NODE_SIZE);
                 break;
             }
 
-            currentOffset = node->nextNodeOffset;
-            node = (ListNode *)((size_t)block + sizeof(ArenaBlock) + currentOffset);
+            // printf("pos3\n");
+
+            offset = node->nextNodeOffset;
+            node = (ListNode *)((size_t)block + sizeof(ArenaBlock) + offset);
         }
 
         //在列表的最后添加节点
         if(!mem){
-            if (ARENA_BLOCK_SIZE - currentOffset >= size + NODE_SIZE){
+            if (ARENA_BLOCK_SIZE - offset >= size + NODE_SIZE){
+                // printf("pos4\n");
                 //创建新节点
-                ListNode * newNode = (ListNode *)((size_t)block + sizeof(ArenaBlock) + currentOffset);
+                ListNode * newNode = (ListNode *)((size_t)block + sizeof(ArenaBlock) + offset);
+                mem = (void *)((size_t)newNode + NODE_SIZE);
                 newNode->size = size+NODE_SIZE;
                 newNode->nextNodeOffset = 0;
-                if (currentOffset >0){ //不是空块
-                    node ->nextNodeOffset = currentOffset + newNode->size;
-                }
+                node ->nextNodeOffset = offset + newNode->size;
+
+                //在最后设置一个结束标志
+                ListNode * endNode = (ListNode *)((size_t)block + sizeof(ArenaBlock) + node ->nextNodeOffset);
+                endNode->size = 0;
+                endNode->nextNodeOffset = 0;
             }
         }
     }
@@ -190,33 +205,126 @@ void updateBlockMaxFreeSpace(ArenaBlock* block){
         maxFreeSpace = block->firstNodeOffset;
     }
 
-    unsigned int currentOffset = block ->firstNodeOffset;
-    ListNode * node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + currentOffset);
+    unsigned int offset = block ->firstNodeOffset;
+    ListNode * node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + offset);
 
     while (node->nextNodeOffset>0){
-        ListNode * nextNode = (ListNode*)((size_t)block + sizeof(ArenaBlock) + node->nextNodeOffset);
-        unsigned int freeSpace = node->nextNodeOffset - currentOffset - node->size;
+        // printf("pos5\n");
+        unsigned int freeSpace = node->nextNodeOffset - offset - node->size;
         if (freeSpace > maxFreeSpace) maxFreeSpace = freeSpace;
 
         //继续往前遍历
-        currentOffset = node->nextNodeOffset;
-        node = nextNode;
+        offset = node->nextNodeOffset;
+        node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + offset);
     }
 
+    //尾部空间
+    unsigned int tailSpace = ARENA_BLOCK_SIZE - offset;
+    if (tailSpace > maxFreeSpace) maxFreeSpace = tailSpace;
+
     block->maxFreeSpace = maxFreeSpace;
+
+    // printf("maxFreeSpace:%u\n",maxFreeSpace);
 }
 
 //把内存归还arena
-// void returnToArena(Object* obj){
-//     //找出obj是在哪个块中
-//     ArenaBlock * block = NULL;
+void returnToArena(Object* obj){
+    //找出obj是在哪个块中
+    ArenaBlock * block = NULL;
 
-//     for (int i = 0; i< arena->numBlocks; i++){
-//         size_t blockStartAddress = (size_t)(arena->blocks[i]);
-//         if (blockStartAddress <)
-//     }
+    //对象的前面就有一个node
+    ListNode * node = (ListNode*)((size_t)obj - NODE_SIZE);
+    // printf("node address in returnToArena:%lu\n",(size_t)node);
 
-// }
+    for (int i = 0; i< arena->numBlocks; i++){
+        size_t blockStartAddress = (size_t)arena->blocks[i] + sizeof(ArenaBlock);
+        size_t blockEndAddress = blockStartAddress + ARENA_BLOCK_SIZE;
+        if (blockStartAddress <= (size_t)node && blockEndAddress >= (size_t)node){
+            block = arena->blocks[i];
+        }
+    }
+
+    if (block){
+        //找到node的前序节点
+        unsigned int offset = (size_t)node - (size_t)block - sizeof(ArenaBlock);
+        // printf("offset in returnToArena:%u\n",offset);
+    
+        if (block->firstNodeOffset == offset){ //是block的第一个节点
+            block->firstNodeOffset = node->nextNodeOffset;
+        }
+        else{
+            unsigned int found = 0;
+            ListNode * prevNode = (ListNode*)((size_t)block + sizeof(ArenaBlock) + block->firstNodeOffset);
+            while(prevNode->nextNodeOffset >0){ 
+                if (prevNode->nextNodeOffset == offset){
+                    found = 1;
+                    break;
+                }
+                prevNode = (ListNode*)((size_t)block + sizeof(ArenaBlock) + prevNode->nextNodeOffset);
+            }
+            if (found ==1){
+                prevNode->nextNodeOffset = node->nextNodeOffset;
+                updateBlockMaxFreeSpace(block);
+            }
+            else{
+                printf("Cannot find object in the arena block.\n");
+            }
+        }
+    }
+    else{
+        printf("Cannot find arena block containing object.\n");
+    }
+}
+
+//gc功能
+//如果对象头的标记字的最后一个bit是1,那么就不是垃圾。
+//返回总共回收的内存空间的大小（不含ListNode所占空间）
+unsigned long gc(){
+    unsigned long garbageCollected = 0;
+
+    for (unsigned int i = 0; i< arena->numBlocks; i++){
+        ArenaBlock * block = arena->blocks[i];
+
+        ListNode * node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + block->firstNodeOffset);
+        ListNode * prevNode = NULL; //前序节点
+        while (node->nextNodeOffset > 0){
+            //找到对象
+            Object * obj = (Object *)((size_t)node + NODE_SIZE);
+            
+            if (obj->flags & 0x0000000000000001){ //最后1个比特是1
+                //清除标记
+                obj->flags = obj->flags & 0xfffffffffffffe;
+            }
+            else{
+                //回收垃圾
+                printf("\ncollecting object:\t%lu\n",(size_t)obj);
+                if(prevNode == NULL){ //第1个节点
+                    block->firstNodeOffset = node->nextNodeOffset;
+                }
+                else{
+                    //如果当前节点是最后一个节点，那么要把node改成新的结束标志
+                    ListNode * nextNode = (ListNode*)((size_t)block + sizeof(ArenaBlock) + node->nextNodeOffset); 
+                    if (nextNode->nextNodeOffset == 0){
+                        node->size = 0;
+                        node->nextNodeOffset = 0;
+                        break; //结束当前block
+                    }
+                    else{ //从链条中去掉node节点
+                        prevNode -> nextNodeOffset = node->nextNodeOffset;
+                    }
+                }
+            }
+
+            prevNode = node;
+            node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + node->nextNodeOffset); 
+        }
+
+    }
+
+    return garbageCollected;
+}
+
+
 
 //释放Arena所占的内存。
 void deleteArena(){
@@ -224,19 +332,25 @@ void deleteArena(){
         free(arena->blocks[i]);
     }
     free(arena->blocks);
+    free(arena);
 }
 
 //打印Arena分配的情况
 void dumpArenaInfo(){
     unsigned long totalMem = arena->numBlocks * (ARENA_BLOCK_SIZE + sizeof(ArenaBlock));
-    printf("Arena: %ud blocks, blocksize=%ud\n, total memory: %ld", arena->numBlocks, ARENA_BLOCK_SIZE, totalMem);
+    printf("Arena: %u block(s), blocksize=%u, total memory ocupied: %ld\n", arena->numBlocks, ARENA_BLOCK_SIZE, totalMem);
     for (unsigned int i = 0; i < arena->numBlocks; i++){
         ArenaBlock * block = arena->blocks[i];
-        printf("\tBlock %ud: maxFreeSpace=%ud\n", i, block->maxFreeSpace);
+        printf("\tBlock %u: maxFreeSpace=%u\n", i, block->maxFreeSpace);
+
         ListNode * node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + block->firstNodeOffset);
-        unsigned int currentOffset = block->firstNodeOffset;
-        while (node->size > 0){
-            printf("\t\tNode: offset=%ud, size=%ud, nextOffset=%ud\n", currentOffset, node->size, node->nextNodeOffset);
+        unsigned int offset = block->firstNodeOffset;
+        while (node->nextNodeOffset > 0){
+            // unsigned int freeSpace = node->nextNodeOffset - offset - node->size;
+            printf("\t\tNode: offset=%u, size=%u, nextOffset=%u\n", offset, node->size, node->nextNodeOffset);
+            
+            offset = node->nextNodeOffset;
+            node = (ListNode*)((size_t)block + sizeof(ArenaBlock) + offset); 
         }
     }
 }

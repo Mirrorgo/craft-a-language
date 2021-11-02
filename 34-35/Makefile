@@ -203,6 +203,10 @@ example : rt_objs
 	@echo "为$@.ts生成可执行文件$@..."
 	gcc -o $@ $@.s rt/*.o
 
+test_mem : rt_objs	
+	@echo "为$@.c生成可执行文件$@..."
+	gcc -o $@ $@.c rt/*.o 
+
 playvm : rt_objs
 	@echo "生成c语言版本的虚拟机palyvm..."
 	gcc -o $@ vm/*.c rt/*.o

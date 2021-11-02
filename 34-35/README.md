@@ -5,13 +5,14 @@
 极客时间《手把手带你写一门编程语言》课程第34-35节示例代码。
 
 #### 本节的测试程序  
-example_metadata.ts
+1.example_metadata.ts
 测试生成函数的元数据。
 运行：node play example_metadata.ts --dumpAsm，看看生成的汇编代码中的元数据。   
-   
-另外，使用make example_matadata.ts，并执行./example_metadata，会遍历栈桢，并打印出这些元数据信息。这是下节课的内容，但你可以先看一下。   
-   
-基于Arena的内存管理程序，可以看看rt/mem.c中的源代码，但还没启用。   
+
+2.example_gc.ts   
+测试垃圾回收功能
+构建：make example_gc
+运行：./example_gc
 
 #### 环境配置注意事项
 

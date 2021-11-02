@@ -944,7 +944,11 @@ class AsmModule{
 
     //根据符号的类型，生成代表类型的数字标记
     private getTypeFlag(t:Type):number{
-        if (t === SysTypes.Number){
+        if (t === SysTypes.Any || t === SysTypes.Void || t === SysTypes.Never){
+            console.log("unsupported type in getTypeFlag()");
+            return 0; 
+        }
+        else if (t === SysTypes.Number){
             return 1; 
         }
         else if (t === SysTypes.Integer){
@@ -956,11 +960,7 @@ class AsmModule{
         else if (t === SysTypes.Boolean){
             return 4; 
         }
-        else if (t === SysTypes.Any || t === SysTypes.Void || t === SysTypes.Never){
-            console.log("unsupported type in getTypeFlag()");
-            return 0; 
-        }
-        else if (t instanceof NamedType){
+        else if (t === SysTypes.String){
             return 5; 
         }
         else if (t instanceof ArrayType){
@@ -968,6 +968,9 @@ class AsmModule{
         }
         else if (t instanceof FunctionType){
             return 7; 
+        }
+        else if (t instanceof NamedType){
+            return 8; 
         }
         else{
             console.log("unsupported type in getTypeFlag()");

@@ -12,9 +12,11 @@ PlayArray* array_create_by_length(size_t length){
     //申请内存
     size_t size = sizeof(Object) + sizeof(size_t) + sizeof(double)*length;
 
-    // printf("size:%ld\n",size);
-
     PlayArray * parr =  (PlayArray*)PlayAlloc(size);
+
+    //设置对象头
+    Object * obj = (Object *)parr;
+    obj ->flags = 0;  
     
     //设置数组长度
     parr->length = length;

@@ -6,6 +6,11 @@ PlayString* string_create_by_length(size_t length){
     //申请内存
     size_t size = sizeof(Object) + sizeof(size_t) + sizeof(unsigned char)*(length+1);
     PlayString * pstr =  (PlayString*)PlayAlloc(size);
+
+    //设置对象头
+    Object * obj = (Object *)pstr;
+    obj ->flags = 0;  
+
     //设置字符串长度
     pstr->length = length;
     // //设置数据指针
