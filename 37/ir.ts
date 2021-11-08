@@ -55,7 +55,7 @@ export class Graph{
 
     getParameterNode(name:string):ParameterNode|null{
         for (let node of this.nodes){
-            if (node instanceof ParameterNode && node.name == name){
+            if (node instanceof ParameterNode && node.name_ == name){
                 return node;
             }
         }
@@ -81,7 +81,7 @@ class VarProxy{
 //基类
 export abstract class IRNode{
     //名称
-    abstract get name():string;
+    abstract get label():string;
 
     //输出名称和它所指向的节点
     abstract toString():string;
@@ -128,17 +128,17 @@ export class ParameterNode extends TerminalNode{
         this.name_ = name;
     }
 
-    get name():string{
-        return this.index +":"+this.name_;
+    get label():string{
+        return this.name_+"_"+this.index;
     }
 
     toString():string{
-        return this.name;
+        return this.label;
     }
 
     equals(node:DataNode):boolean{
         if (node instanceof ParameterNode){
-            return node.name == this.name;
+            return node.name_ == this.name_;
         }
         return false;
     }
@@ -153,12 +153,12 @@ export class ConstantNode extends TerminalNode{
         this.value = value;
     }
 
-    get name():string{
-        return this.index +":"+"C("+this.value+")";
+    get label():string{
+        return "C_"+this.value+"_"+this.index;
     }
 
     toString():string{
-        return this.name;
+        return this.label;
     }
 
     equals(node:DataNode):boolean{
@@ -186,12 +186,12 @@ export class BinaryOpNode extends DataNode{
         right.uses.push(this);
     }
 
-    get name():string{
-        return this.index +":"+Op[this.op];
+    get label():string{
+        return Op[this.op]+"_"+this.index;
     }
 
     toString():string{
-        return this.name+"(left->"+this.left.name+",right->"+this.right.name+")";
+        return this.label+"(left->"+this.left.label+",right->"+this.right.label+")";
     }
 
     get inputs():DataNode[]{
@@ -222,14 +222,14 @@ export class UnaryOpNode extends DataNode{
         data.uses.push(this);
     }
 
-    get name():string{
-        return this.index +":"+Op[this.op];
+    get label():string{
+        return Op[this.op]+"_"+this.index;
     }
 
     toString():string{
-        return this.name
+        return this.label
             + "(" + (this.isPrefix? "prefix":"postfix")
-            + ",data->" + this.data.name
+            + ",data->" + this.data.label
             + ")";
     }
 
@@ -258,14 +258,14 @@ export class PhiNode extends DataNode{
         return this.inputs_;
     }
 
-    get name():string{
-        return this.index +":"+"PhiNode";
+    get label():string{
+        return "PhiNode"+"_"+this.index;
     }
 
     toString():string{
         // let str="inputs:";
         // for (let )
-        return this.name; //todo
+        return this.label; //todo
     }
 
     equals(node:DataNode):boolean{
@@ -333,7 +333,7 @@ export abstract class AbstractEndNode extends ControlNode{
     }
 
     toString():string{
-        return this.name;
+        return this.label;
     }
 }
 
@@ -348,11 +348,11 @@ export abstract class AbstractMergeNode extends AbstractBeginNode{
         let str="("
         for (let i = 0; i < this.inputs.length; i++){
             let node = this.inputs[i];
-            str+= node.name;
+            str+= node.label;
             if (i < this.inputs.length-1) str +=",";
         }
         str += ")";
-        return  this.name + str;
+        return  this.label + str;
     }
 }
 
@@ -366,30 +366,30 @@ export class FunctionNode extends AbstractBeginNode{
         this.params = params;
     }
 
-    get name():string{
-        return this.index +":"+this.name_;
+    get label():string{
+        return this.name_+"_"+this.index;
     }
 
     toString():string{
         let paramStr="("
         for (let i = 0; i < this.params.length; i++){
             let param = this.params[i];
-            paramStr+= param.name;
+            paramStr+= param.label;
             if (i < this.params.length-1) paramStr +=",";
         }
         paramStr += ")";
-        return this.name + paramStr;
+        return this.label + paramStr;
     }
 }
 
 //函数开始节点
 export class StartNode extends AbstractBeginNode{
-    get name():string{
-        return this.index +":"+"Start";
+    get label():string{
+        return "Start"+"_"+this.index;
     }
 
     toString():string{
-        return this.name+"(->"+this.next.name+")";
+        return this.label+"(->"+this.next.label+")";
     }
 }
 
@@ -402,12 +402,12 @@ export class ReturnNode extends AbstractEndNode{
         this.value = value;
     }
 
-    get name():string{
-        return this.index +":"+"ReturnNode";
+    get label():string{
+        return "ReturnNode"+"_"+this.index;
     }
 
     toString():string{
-        return this.name + (this.value? "(value->"+ this.value?.name +")" : "");
+        return this.label + (this.value? "(value->"+ this.value?.label +")" : "");
     }    
 }
 
@@ -427,15 +427,15 @@ export class IfNode extends ControlNode{
         elseBranch.predecessor=this;
     }
 
-    get name():string{
-        return this.index +":"+"If";
+    get label():string{
+        return "If"+"_"+this.index;
     }
 
     toString():string{
-        return this.name
-                    + "(condition->" + this.condition.name 
-                    + ", then->" + this.trueBranch.name 
-                    + (this.falseBranch? ", else->"+this.falseBranch?.name :"")
+        return this.label
+                    + "(condition->" + this.condition.label 
+                    + ", then->" + this.trueBranch.label 
+                    + (this.falseBranch? ", else->"+this.falseBranch?.label :"")
                     + ")";
     }
 
@@ -448,30 +448,30 @@ export class IfNode extends ControlNode{
 }
 
 export class BeginNode extends AbstractBeginNode{
-    get name():string{
-        return this.index +":"+"Begin";
+    get label():string{
+        return "Begin"+"_"+this.index;
     }
 
     toString():string{
-        return this.name+"(->"+this.next.name+")";
+        return this.label+"(->"+this.next.label+")";
     }
 }
 
 export class EndNode extends AbstractEndNode{
-    get name():string{
-        return this.index +":"+"End";
+    get label():string{
+        return "End"+"_"+this.index;
     }
 }
 
 export class MergeNode extends AbstractMergeNode{  
-    get name():string{
-        return this.index +":"+"Merge";
+    get label():string{
+        return "Merge"+"_"+this.index;
     }
 }
 
 export class LoopBegin extends AbstractMergeNode{  
-    get name():string{
-        return this.index +":"+"LoopBegin";
+    get label():string{
+        return "LoopBegin"+"_"+this.index;
     }
 }
 
@@ -483,8 +483,8 @@ export class LoopEnd extends AbstractEndNode{
         this.loopBegin = loopBegin;
     }
 
-    get name():string{
-        return this.index +":"+"LoopEnd";
+    get label():string{
+        return "LoopEnd"+"_"+this.index;
     }
 }
 
@@ -496,18 +496,18 @@ export class LoopExit extends AbstractEndNode{
         this.loopBegin = loopBegin;
     }
 
-    get name():string{
-        return this.index +":"+"LoopExit";
+    get label():string{
+        return "LoopExit"+"_"+this.index;
     }
 }
 
 //用作占位符，用于创建IR图的过程中
 class FakeControlNode extends ControlNode{
-    get name():string{
-        return this.index +":"+"Fake";
+    get label():string{
+        return "Fake"+"_"+this.index;
     }
     toString():string{
-        return this.name;
+        return this.label;
     }
     get successors():ControlNode[]{
         return [];
@@ -752,10 +752,11 @@ export class IRGenerator extends AstVisitor{
         }
         //右值：返回DataNode
         else{
-            //如果是参数，生成ParameterNode
+            //如果是参数，获取ParameterNode
             if (this.functionSym.vars.indexOf(v.sym as VarSymbol) < this.functionSym.getNumParams()){
-                let node = new ParameterNode(v.name,v.theType as Type);
-                return this.graph.addDataNode(node);
+                let node = this.graph.getParameterNode(v.name);
+                assert(node, "in visitVariable, 参数节点不应该为null");
+                return node;
             }
             //如果是本地变量，那就要找到它的定义
             else{
@@ -797,20 +798,29 @@ export class IRGenerator extends AstVisitor{
     }
 
     visitVariableDecl(variableDecl:VariableDecl, additional:any):any{
-        //生成变量的定义
-        if (variableDecl.init){
-            let node = this.visit(variableDecl.init, additional) as DataNode;
-            node = this.graph.addDataNode(node);
-            
-            //添加定义，返回一个VarProxy
-            let varProxy = this.graph.addVarDefinition(variableDecl.sym as VarSymbol, node);
-            
-            //设置当前流中应该使用哪个Proxy
-            assert(additional instanceof ControlNode, "visitVariableDecl的addtional参数应该是控制流");
-            let beginNode = (additional as ControlNode).beginNode;
-            this.setVarProxyForFlow(beginNode,variableDecl.sym as VarSymbol,varProxy);
-
+        //参数
+        if (this.functionSym.vars.indexOf(variableDecl.sym as VarSymbol) < this.functionSym.getNumParams()){
+            let node = new ParameterNode(variableDecl.name, variableDecl.theType);
+            this.graph.addDataNode(node);
             return node;
+        }
+        //本地变量
+        else{
+            //生成变量的定义
+            if (variableDecl.init){
+                let node = this.visit(variableDecl.init, additional) as DataNode;
+                node = this.graph.addDataNode(node);
+                
+                //添加定义，返回一个VarProxy
+                let varProxy = this.graph.addVarDefinition(variableDecl.sym as VarSymbol, node);
+                
+                //设置当前流中应该使用哪个Proxy
+                assert(additional instanceof ControlNode, "visitVariableDecl的addtional参数应该是控制流");
+                let beginNode = (additional as ControlNode).beginNode;
+                this.setVarProxyForFlow(beginNode,variableDecl.sym as VarSymbol,varProxy);
+
+                return node;
+            }
         }
     }
 
@@ -855,24 +865,27 @@ export class GraphPainter{
         let str = "digraph{\n";
         for (let node of graph.nodes){
             if (node instanceof UniSuccessorNode){
-                str += "\t" + node.name + " -> " + node.next.name+"\n";
+                str += "\t" + node.label + " -> " + node.next.label+"\n";
                 if (node instanceof AbstractMergeNode){
                     for (let input of node.inputs){
-                        str += "\t" + node.name + " -> " + input.name+"\n";
+                        str += "\t" + node.label + " -> " + input.label+"\n";
                     }
                 }
             }
             else if (node instanceof IfNode){
-                str += "\t" + node.name + " -> " + node.condition.name+"\n";
-                str += "\t" + node.name + " -> " + node.trueBranch.name+"\n";
-                str += "\t" + node.name + " -> " + node.falseBranch.name+"\n";
+                str += "\t" + node.label + " -> " + node.condition.label+"\n";
+                str += "\t" + node.label + " -> " + node.trueBranch.label+"\n";
+                str += "\t" + node.label + " -> " + node.falseBranch.label+"\n";
             }
             else if (node instanceof DataNode){
                 for (let input of node.inputs){
-                    str += "\t" + node.name + " -> " + input.name+"\n";
+                    str += "\t" + node.label + " -> " + input.label+"\n";
                 }
                 if (node instanceof PhiNode){
-                    str += "\t" + node.name + " -> " + node.mergeNode.name+"\n";
+                    str += "\t" + node.label + " -> " + node.mergeNode.label+"\n";
+                }
+                else if (node instanceof ReturnNode && node.value){
+                    str += "\t" + node.label + " -> " + node.value.label+"\n";
                 }
             }
         }
