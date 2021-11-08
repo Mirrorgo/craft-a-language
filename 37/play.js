@@ -727,8 +727,10 @@ function compileAndRun(args) {
                 let graph = irModule.fun2Graph.get(funSym);
                 let str = ir_1.GraphPainter.toDot(graph);
                 let dotFileName = args.fileNameWithoutPostfix + "_" + funSym.name + ".dot";
+                console.log("  " + dotFileName + "...");
                 writeTextFile(dotFileName, str);
             }
+            console.log("输出IR完毕，请用graphviz或vscode查看.dot文件。");
         }
     }
     //直接运行字节码文件

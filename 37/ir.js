@@ -12,18 +12,13 @@ const console_1 = require("console");
 //IR图
 class Graph {
     constructor() {
+        //所有节点的列表
         this.nodes = [];
+        //笑一个节点的序号
+        this.nextIndex = 0;
         //变量跟Node的映射
         this.varProxy2Node = new Map();
     }
-    // contains(node:DataNode):boolean{
-    //     for(let node1 of this.nodes){
-    //         if (node1 instanceof DataNode && node1.equals(node)){
-    //             return true;
-    //         }
-    //     }
-    //     return false;
-    // }
     //如果没有同样的节点，就添加进去。否则，就返回原来的节点
     addDataNode(node) {
         for (let node1 of this.nodes) {
@@ -32,6 +27,12 @@ class Graph {
             }
         }
         this.nodes.push(node);
+        node.index = this.nextIndex++;
+        return node;
+    }
+    addControlNode(node) {
+        this.nodes.push(node);
+        node.index = this.nextIndex++;
         return node;
     }
     //添加对象的定义，返回一个proxy
@@ -67,6 +68,10 @@ class VarProxy {
 //HIR  抽象度比较高的IR，接近高级语言的特性
 //基类
 class IRNode {
+    constructor() {
+        //当前节点在图中的序号
+        this.index = -1; //未被正式赋值前，为-1
+    }
 }
 exports.IRNode = IRNode;
 //-------DataNodes--------
@@ -95,7 +100,7 @@ class ParameterNode extends TerminalNode {
         this.name_ = name;
     }
     get name() {
-        return this.name_;
+        return this.index + ":" + this.name_;
     }
     toString() {
         return this.name;
@@ -115,7 +120,7 @@ class ConstantNode extends TerminalNode {
         this.value = value;
     }
     get name() {
-        return "C(" + this.value + ")";
+        return this.index + ":" + "C(" + this.value + ")";
     }
     toString() {
         return this.name;
@@ -140,7 +145,7 @@ class BinaryOpNode extends DataNode {
         right.uses.push(this);
     }
     get name() {
-        return scanner_1.Op[this.op];
+        return this.index + ":" + scanner_1.Op[this.op];
     }
     toString() {
         return this.name + "(left->" + this.left.name + ",right->" + this.right.name + ")";
@@ -167,7 +172,7 @@ class UnaryOpNode extends DataNode {
         data.uses.push(this);
     }
     get name() {
-        return scanner_1.Op[this.op];
+        return this.index + ":" + scanner_1.Op[this.op];
     }
     toString() {
         return this.name
@@ -196,7 +201,7 @@ class PhiNode extends DataNode {
         return this.inputs_;
     }
     get name() {
-        return "PhiNode";
+        return this.index + ":" + "PhiNode";
     }
     toString() {
         // let str="inputs:";
@@ -292,7 +297,7 @@ class FunctionNode extends AbstractBeginNode {
         this.params = params;
     }
     get name() {
-        return this.name_;
+        return this.index + ":" + this.name_;
     }
     toString() {
         let paramStr = "(";
@@ -310,7 +315,7 @@ exports.FunctionNode = FunctionNode;
 //函数开始节点
 class StartNode extends AbstractBeginNode {
     get name() {
-        return "Start";
+        return this.index + ":" + "Start";
     }
     toString() {
         return this.name + "(->" + this.next.name + ")";
@@ -325,7 +330,7 @@ class ReturnNode extends AbstractEndNode {
         this.value = value;
     }
     get name() {
-        return "ReturnNode";
+        return this.index + ":" + "ReturnNode";
     }
     toString() {
         var _a;
@@ -344,7 +349,7 @@ class IfNode extends ControlNode {
         elseBranch.predecessor = this;
     }
     get name() {
-        return "If";
+        return this.index + ":" + "If";
     }
     toString() {
         var _a;
@@ -364,7 +369,7 @@ class IfNode extends ControlNode {
 exports.IfNode = IfNode;
 class BeginNode extends AbstractBeginNode {
     get name() {
-        return "Begin";
+        return this.index + ":" + "Begin";
     }
     toString() {
         return this.name + "(->" + this.next.name + ")";
@@ -373,19 +378,19 @@ class BeginNode extends AbstractBeginNode {
 exports.BeginNode = BeginNode;
 class EndNode extends AbstractEndNode {
     get name() {
-        return "End";
+        return this.index + ":" + "End";
     }
 }
 exports.EndNode = EndNode;
 class MergeNode extends AbstractMergeNode {
     get name() {
-        return "Merge";
+        return this.index + ":" + "Merge";
     }
 }
 exports.MergeNode = MergeNode;
 class LoopBegin extends AbstractMergeNode {
     get name() {
-        return "LoopBegin";
+        return this.index + ":" + "LoopBegin";
     }
 }
 exports.LoopBegin = LoopBegin;
@@ -395,7 +400,7 @@ class LoopEnd extends AbstractEndNode {
         this.loopBegin = loopBegin;
     }
     get name() {
-        return "LoopEnd";
+        return this.index + ":" + "LoopEnd";
     }
 }
 exports.LoopEnd = LoopEnd;
@@ -405,14 +410,14 @@ class LoopExit extends AbstractEndNode {
         this.loopBegin = loopBegin;
     }
     get name() {
-        return "LoopExit";
+        return this.index + ":" + "LoopExit";
     }
 }
 exports.LoopExit = LoopExit;
 //用作占位符，用于创建IR图的过程中
 class FakeControlNode extends ControlNode {
     get name() {
-        return "Fake";
+        return this.index + ":" + "Fake";
     }
     toString() {
         return this.name;
@@ -480,12 +485,12 @@ class IRGenerator extends ast_1.AstVisitor {
         this.module.fun2Graph.set(this.functionSym, this.graph);
         //创建开始节点
         let startNode = new StartNode(new FakeControlNode);
-        this.graph.nodes.push(startNode);
+        this.graph.addControlNode(startNode);
         //继续遍历
         super.visitProg(prog, startNode);
         //创建程序节点
         let functionNode = new FunctionNode("main", [], startNode);
-        this.graph.nodes.push(functionNode);
+        this.graph.addControlNode(functionNode);
         //恢复上下文
         this._graphs.pop();
         this._funcitonSyms.pop();
@@ -499,7 +504,7 @@ class IRGenerator extends ast_1.AstVisitor {
         this.module.fun2Graph.set(this.functionSym, this.graph);
         //创建函数节点和开始节点
         let startNode = new StartNode(new FakeControlNode);
-        this.graph.nodes.push(startNode);
+        this.graph.addControlNode(startNode);
         //继续遍历
         super.visitFunctionDecl(functinDecl, startNode);
         //取出参数
@@ -513,19 +518,21 @@ class IRGenerator extends ast_1.AstVisitor {
         }
         //创建函数节点s
         let functionNode = new FunctionNode(functinDecl.name, params, startNode);
-        this.graph.nodes.push(functionNode);
+        this.graph.addControlNode(functionNode);
         //恢复上下文
         this._graphs.pop();
         this._funcitonSyms.pop();
-        return functionNode;
+        // return functionNode;
     }
     visitIfStatement(ifStmt, additional) {
         ////条件
         let conditionNode = this.visit(ifStmt.condition, additional);
         ////true分支        
         let begin1 = new BeginNode(new FakeControlNode());
+        this.graph.addControlNode(begin1);
         let next1 = this.visit(ifStmt.stmt, begin1);
         let end1 = new EndNode();
+        this.graph.addControlNode(end1);
         if (next1 instanceof UniSuccessorNode) {
             next1.next = end1;
         }
@@ -534,8 +541,10 @@ class IRGenerator extends ast_1.AstVisitor {
         }
         ////false分支        
         let begin2 = new BeginNode(new FakeControlNode());
+        this.graph.addControlNode(begin2);
         let next2 = this.visit(ifStmt.stmt, begin2);
         let end2 = new EndNode();
+        this.graph.addControlNode(end2);
         if (next2 instanceof UniSuccessorNode) {
             next2.next = end2;
         }
@@ -544,10 +553,12 @@ class IRGenerator extends ast_1.AstVisitor {
         }
         ////创建IfNode
         let ifNode = new IfNode(conditionNode, begin1, begin2);
+        this.graph.addControlNode(ifNode);
         console_1.assert(additional instanceof UniSuccessorNode, "in visitIfStatement, prev node should be UniSuccessorNode");
         additional.next = ifNode;
         ////创建Merge节点
         let mergeNode = new MergeNode([end1, end2], new FakeControlNode());
+        this.graph.addControlNode(mergeNode);
         return mergeNode;
     }
     visitBlock(block, additional) {
@@ -556,10 +567,14 @@ class IRGenerator extends ast_1.AstVisitor {
         for (let stmt of block.stmts) {
             let node = this.visit(stmt, prevNode);
             if (node instanceof ControlNode) {
-                prevNode.next = node; //替换掉原来的占位符
-                //继续往下延伸控制流
-                if (node instanceof UniSuccessorNode)
+                if (node instanceof AbstractBeginNode) {
+                    prevNode = node; //重新开启一个控制流
+                }
+                else {
+                    prevNode.next = node; //替换掉原来的占位符
+                    console_1.assert(node instanceof UniSuccessorNode, "in visitBlock, node should be UniSuccessorNode.");
                     prevNode = node;
+                }
             }
         }
     }
@@ -570,6 +585,7 @@ class IRGenerator extends ast_1.AstVisitor {
             value = this.visit(rtnStmt.exp, additional);
         }
         let rtnNode = new ReturnNode(value);
+        this.graph.addControlNode(rtnNode);
         //接续控制流
         let prevNode = additional;
         prevNode.next = rtnNode;
@@ -624,6 +640,7 @@ class IRGenerator extends ast_1.AstVisitor {
                         }
                         //创建phi节点
                         let phiNode = new PhiNode(beginNode, dataInputs, v.theType);
+                        phiNode = this.graph.addDataNode(phiNode);
                         //创建新的VarSymbol，并跟当前的Flow绑定。
                         varProxy = this.graph.addVarDefinition(v.sym, phiNode);
                         this.setVarProxyForFlow(beginNode, v.sym, varProxy);
@@ -688,7 +705,7 @@ class GraphPainter {
         for (let node of graph.nodes) {
             if (node instanceof UniSuccessorNode) {
                 str += "\t" + node.name + " -> " + node.next.name + "\n";
-                if (node instanceof MergeNode) {
+                if (node instanceof AbstractMergeNode) {
                     for (let input of node.inputs) {
                         str += "\t" + node.name + " -> " + input.name + "\n";
                     }
@@ -702,6 +719,9 @@ class GraphPainter {
             else if (node instanceof DataNode) {
                 for (let input of node.inputs) {
                     str += "\t" + node.name + " -> " + input.name + "\n";
+                }
+                if (node instanceof PhiNode) {
+                    str += "\t" + node.name + " -> " + node.mergeNode.name + "\n";
                 }
             }
         }
