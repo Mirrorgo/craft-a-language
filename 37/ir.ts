@@ -878,36 +878,41 @@ export class GraphPainter{
                 fillColor = "orange";
             }
             
-            str += "node"+node.index+" [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + node.label +"\"" 
+            str += "\tnode"+node.index+" [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + node.label +"\"" 
                    + ", fillcolor=\"" + fillColor + "\""
-                   + "]"
+                   + "]\n"
         }
 
+        str+="\n";
+
         //生成连线
+        let dataLineStyle=" [color=\"orange\"]";
+        let controlLineStyle=" [color=\"blue\"]";
+
         for (let node of graph.nodes){
             let nodeName = "node"+node.index;
             if (node instanceof UniSuccessorNode){
-                str += "\t" + nodeName + " -> node" + node.next.index+"\n";
+                str += "\t" + nodeName + " -> node" + node.next.index+controlLineStyle+"\n";
                 if (node instanceof AbstractMergeNode){
                     for (let input of node.inputs){
                         str += "\t" + nodeName + " -> node" + input.index+"\n";
                     }
                 }
             }
+            else if (node instanceof ReturnNode && node.value){
+                str += "\t" + nodeName + " -> node" + node.value.index+"\n";
+            }
             else if (node instanceof IfNode){
                 str += "\t" + nodeName + " -> node" + node.condition.index+"\n";
-                str += "\t" + nodeName + " -> node" + node.trueBranch.index+"\n";
-                str += "\t" + nodeName + " -> node" + node.falseBranch.index+"\n";
+                str += "\t" + nodeName + " -> node" + node.trueBranch.index+controlLineStyle+"\n";
+                str += "\t" + nodeName + " -> node" + node.falseBranch.index+controlLineStyle+"\n";
             }
             else if (node instanceof DataNode){
                 for (let input of node.inputs){
-                    str += "\t" + nodeName + " -> node" + input.index+"\n";
+                    str += "\t" + nodeName + " -> node" + input.index+dataLineStyle+"\n";
                 }
                 if (node instanceof PhiNode){
                     str += "\t" + nodeName + " -> node" + node.mergeNode.index +"\n";
-                }
-                else if (node instanceof ReturnNode && node.value){
-                    str += "\t" + nodeName + " -> node" + node.value.index+"\n";
                 }
             }
         }
