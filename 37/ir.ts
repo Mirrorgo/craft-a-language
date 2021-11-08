@@ -863,29 +863,51 @@ export class IRGenerator extends AstVisitor{
 export class GraphPainter{
     static toDot(graph:Graph):string{
         let str = "digraph{\n";
+        //生成每个节点的样式和label
         for (let node of graph.nodes){
+            let fillColor:string="lightgray";
+            if (node instanceof ControlNode){
+                if (node instanceof FunctionNode){
+                    fillColor = "lightgreen";
+                }
+                else{
+                    fillColor = "lightblue";
+                }
+            }
+            else if (node instanceof DataNode){
+                fillColor = "orange";
+            }
+            
+            str += "node"+node.index+" [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + node.label +"\"" 
+                   + ", fillcolor=\"" + fillColor + "\""
+                   + "]"
+        }
+
+        //生成连线
+        for (let node of graph.nodes){
+            let nodeName = "node"+node.index;
             if (node instanceof UniSuccessorNode){
-                str += "\t" + node.label + " -> " + node.next.label+"\n";
+                str += "\t" + nodeName + " -> node" + node.next.index+"\n";
                 if (node instanceof AbstractMergeNode){
                     for (let input of node.inputs){
-                        str += "\t" + node.label + " -> " + input.label+"\n";
+                        str += "\t" + nodeName + " -> node" + input.index+"\n";
                     }
                 }
             }
             else if (node instanceof IfNode){
-                str += "\t" + node.label + " -> " + node.condition.label+"\n";
-                str += "\t" + node.label + " -> " + node.trueBranch.label+"\n";
-                str += "\t" + node.label + " -> " + node.falseBranch.label+"\n";
+                str += "\t" + nodeName + " -> node" + node.condition.index+"\n";
+                str += "\t" + nodeName + " -> node" + node.trueBranch.index+"\n";
+                str += "\t" + nodeName + " -> node" + node.falseBranch.index+"\n";
             }
             else if (node instanceof DataNode){
                 for (let input of node.inputs){
-                    str += "\t" + node.label + " -> " + input.label+"\n";
+                    str += "\t" + nodeName + " -> node" + input.index+"\n";
                 }
                 if (node instanceof PhiNode){
-                    str += "\t" + node.label + " -> " + node.mergeNode.label+"\n";
+                    str += "\t" + nodeName + " -> node" + node.mergeNode.index +"\n";
                 }
                 else if (node instanceof ReturnNode && node.value){
-                    str += "\t" + node.label + " -> " + node.value.label+"\n";
+                    str += "\t" + nodeName + " -> node" + node.value.index+"\n";
                 }
             }
         }
