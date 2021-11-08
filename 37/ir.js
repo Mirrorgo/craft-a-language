@@ -573,6 +573,8 @@ class IRGenerator extends ast_1.AstVisitor {
                 else {
                     prevNode.next = node; //替换掉原来的占位符
                     console_1.assert(node instanceof UniSuccessorNode, "in visitBlock, node should be UniSuccessorNode.");
+                    if (!(node instanceof UniSuccessorNode))
+                        console.log(node);
                     prevNode = node;
                 }
             }
@@ -589,7 +591,6 @@ class IRGenerator extends ast_1.AstVisitor {
         //接续控制流
         let prevNode = additional;
         prevNode.next = rtnNode;
-        return rtnNode;
     }
     visitIntegerLiteral(literal, additional) {
         return this.handleLiteral(literal);

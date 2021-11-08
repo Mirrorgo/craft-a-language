@@ -686,6 +686,7 @@ export class IRGenerator extends AstVisitor{
 
     visitBlock(block:Block, additional:any):any{
         assert(additional instanceof UniSuccessorNode, "in visitBlock, prev node should be UniSuccessorNode");
+
         let prevNode:UniSuccessorNode = additional as UniSuccessorNode;
 
         for (let stmt of block.stmts){
@@ -697,6 +698,7 @@ export class IRGenerator extends AstVisitor{
                 else{
                     prevNode.next = node;   //替换掉原来的占位符
                     assert(node instanceof UniSuccessorNode, "in visitBlock, node should be UniSuccessorNode.");
+                    if (!(node instanceof UniSuccessorNode)) console.log(node);
                     prevNode = node as UniSuccessorNode;
                 }
             }
@@ -716,8 +718,6 @@ export class IRGenerator extends AstVisitor{
         //接续控制流
         let prevNode = additional as UniSuccessorNode;
         prevNode.next= rtnNode;
-
-        return rtnNode;
     }
 
     visitIntegerLiteral(literal:IntegerLiteral, additional:any):any{
