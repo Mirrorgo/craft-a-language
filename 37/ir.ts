@@ -299,11 +299,19 @@ export abstract class ControlNode extends IRNode{
 }
 
 export abstract class UniSuccessorNode extends ControlNode{
-   next:ControlNode;
+   next_:ControlNode;
+   get next():ControlNode{
+       return this.next_;
+   }
+   set next(newNode:ControlNode){
+       this.next_ = newNode;
+       this.next_.predecessor = this;
+   }
+
    constructor(next:ControlNode){
        super();
-       this.next = next;
-       this.next.predecessor=this;
+       this.next_ = next;
+       this.next_.predecessor = this;
    }
    get successors():ControlNode[]{
        return [this.next];
@@ -626,7 +634,6 @@ export class IRGenerator extends AstVisitor{
 
         return functionNode;
     }
-
 
     visitIfStatement(ifStmt:IfStatement, additional:any):any{
         ////条件

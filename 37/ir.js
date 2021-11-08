@@ -239,8 +239,15 @@ exports.ControlNode = ControlNode;
 class UniSuccessorNode extends ControlNode {
     constructor(next) {
         super();
-        this.next = next;
-        this.next.predecessor = this;
+        this.next_ = next;
+        this.next_.predecessor = this;
+    }
+    get next() {
+        return this.next_;
+    }
+    set next(newNode) {
+        this.next_ = newNode;
+        this.next_.predecessor = this;
     }
     get successors() {
         return [this.next];
@@ -437,10 +444,6 @@ class IRGenerator extends ast_1.AstVisitor {
         //对每个变量维护一个栈，从而知道当前代码用到的是变量的哪个定义
         //存储方式：VarProxy跟作用域绑定。在同一个作用域里，如果有多个定义，则后面的定义会替换掉前面的。
         this.varProxyMap = new Map();
-        //控制流节点的工作区
-        //创建控制流节点的时候，总是从栈中取出后继节点，建立新节点，然后把自己压进去
-        //有点像shift-reduce算法中的工作区
-        this.controlNodeStack = [];
         this.module = module;
     }
     get graph() {
@@ -531,17 +534,16 @@ class IRGenerator extends ast_1.AstVisitor {
         }
         ////false分支        
         let begin2 = new BeginNode(new FakeControlNode());
-        let next2 = this.visit(ifStmt.stmt, begin1);
+        let next2 = this.visit(ifStmt.stmt, begin2);
         let end2 = new EndNode();
         if (next2 instanceof UniSuccessorNode) {
-            next2.next = end1;
+            next2.next = end2;
         }
         else {
-            begin2.next = end1;
+            begin2.next = end2;
         }
         ////创建IfNode
         let ifNode = new IfNode(conditionNode, begin1, begin2);
-        this.controlNodeStack.push(ifNode);
         console_1.assert(additional instanceof UniSuccessorNode, "in visitIfStatement, prev node should be UniSuccessorNode");
         additional.next = ifNode;
         ////创建Merge节点
@@ -565,7 +567,7 @@ class IRGenerator extends ast_1.AstVisitor {
         console_1.assert(additional instanceof UniSuccessorNode, "in visitReturnStatement, prev node should be UniSuccessorNode");
         let value = null;
         if (rtnStmt.exp) {
-            value = this.visit(rtnStmt.exp);
+            value = this.visit(rtnStmt.exp, additional);
         }
         let rtnNode = new ReturnNode(value);
         //接续控制流
@@ -640,7 +642,7 @@ class IRGenerator extends ast_1.AstVisitor {
     visitVariableDecl(variableDecl, additional) {
         //生成变量的定义
         if (variableDecl.init) {
-            let node = this.visit(variableDecl.init);
+            let node = this.visit(variableDecl.init, additional);
             node = this.graph.addDataNode(node);
             //添加定义，返回一个VarProxy
             let varProxy = this.graph.addVarDefinition(variableDecl.sym, node);
@@ -655,8 +657,8 @@ class IRGenerator extends ast_1.AstVisitor {
         let node;
         //如果是赋值，那要看看是否需要生成新的变量，以符合SSA
         if (binary.op == scanner_1.Op.Assign) {
-            let left = this.visit(binary.exp1);
-            let right = this.visit(binary.exp2);
+            let left = this.visit(binary.exp1, additional);
+            let right = this.visit(binary.exp2, additional);
             console_1.assert(left instanceof symbol_1.VarSymbol, "在VisitBinary中，=左边应该返回一个VarSymbol");
             console_1.assert(right instanceof DataNode, "在VisitBinary中，=左边应该是一个DataNode");
             node = this.graph.addDataNode(right);
@@ -668,8 +670,8 @@ class IRGenerator extends ast_1.AstVisitor {
             this.setVarProxyForFlow(beginNode, left, varProxy);
         }
         else {
-            let left = this.visit(binary.exp1);
-            let right = this.visit(binary.exp2);
+            let left = this.visit(binary.exp1, additional);
+            let right = this.visit(binary.exp2, additional);
             node = new BinaryOpNode(left, right, binary.op, binary.theType);
             node = this.graph.addDataNode(node);
         }
