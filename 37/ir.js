@@ -81,6 +81,9 @@ class VarProxy {
         this.varSym = varSym;
         this.index = index;
     }
+    get label() {
+        return this.varSym.name + this.index;
+    }
 }
 //////////////////////////////////////////////////////////////////////////
 //HIR  抽象度比较高的IR，接近高级语言的特性
@@ -118,7 +121,7 @@ class ParameterNode extends TerminalNode {
         this.name_ = name;
     }
     get label() {
-        return this.name_ + "_" + this.index;
+        return "P(" + this.name_ + ")";
     }
     toString() {
         return this.label;
@@ -138,7 +141,7 @@ class ConstantNode extends TerminalNode {
         this.value = value;
     }
     get label() {
-        return "C_" + this.value + "_" + this.index;
+        return "C(" + this.value + ")";
     }
     toString() {
         return this.label;
@@ -163,7 +166,7 @@ class BinaryOpNode extends DataNode {
         right.uses.push(this);
     }
     get label() {
-        return scanner_1.Op[this.op] + "_" + this.index;
+        return scanner_1.Op[this.op];
     }
     toString() {
         return this.label + "(left->" + this.left.label + ",right->" + this.right.label + ")";
@@ -190,7 +193,7 @@ class UnaryOpNode extends DataNode {
         data.uses.push(this);
     }
     get label() {
-        return scanner_1.Op[this.op] + "_" + this.index;
+        return scanner_1.Op[this.op];
     }
     toString() {
         return this.label
@@ -222,7 +225,7 @@ class PhiNode extends DataNode {
         return this.inputs_;
     }
     get label() {
-        return "PhiNode" + "_" + this.index;
+        return "Phi";
     }
     toString() {
         // let str="inputs:";
@@ -318,7 +321,7 @@ class FunctionNode extends AbstractBeginNode {
         this.params = params;
     }
     get label() {
-        return this.name_ + "_" + this.index;
+        return this.name_;
     }
     toString() {
         let paramStr = "(";
@@ -336,7 +339,7 @@ exports.FunctionNode = FunctionNode;
 //函数开始节点
 class StartNode extends AbstractBeginNode {
     get label() {
-        return "Start" + "_" + this.index;
+        return "Start";
     }
     toString() {
         return this.label + "(->" + this.next.label + ")";
@@ -353,7 +356,7 @@ class ReturnNode extends AbstractEndNode {
         (_a = this.value) === null || _a === void 0 ? void 0 : _a.uses.push(this);
     }
     get label() {
-        return "ReturnNode" + "_" + this.index;
+        return "Return";
     }
     toString() {
         var _a;
@@ -373,7 +376,7 @@ class IfNode extends ControlNode {
         elseBranch.predecessor = this;
     }
     get label() {
-        return "If" + "_" + this.index;
+        return "If";
     }
     toString() {
         var _a;
@@ -393,7 +396,7 @@ class IfNode extends ControlNode {
 exports.IfNode = IfNode;
 class BeginNode extends AbstractBeginNode {
     get label() {
-        return "Begin" + "_" + this.index;
+        return "Begin";
     }
     toString() {
         return this.label + "(->" + this.next.label + ")";
@@ -402,19 +405,19 @@ class BeginNode extends AbstractBeginNode {
 exports.BeginNode = BeginNode;
 class EndNode extends AbstractEndNode {
     get label() {
-        return "End" + "_" + this.index;
+        return "End";
     }
 }
 exports.EndNode = EndNode;
 class MergeNode extends AbstractMergeNode {
     get label() {
-        return "Merge" + "_" + this.index;
+        return "Merge";
     }
 }
 exports.MergeNode = MergeNode;
 class LoopBegin extends AbstractMergeNode {
     get label() {
-        return "LoopBegin" + "_" + this.index;
+        return "LoopBegin";
     }
 }
 exports.LoopBegin = LoopBegin;
@@ -424,7 +427,7 @@ class LoopEnd extends AbstractEndNode {
         this.loopBegin = loopBegin;
     }
     get label() {
-        return "LoopEnd" + "_" + this.index;
+        return "LoopEnd";
     }
 }
 exports.LoopEnd = LoopEnd;
@@ -434,14 +437,14 @@ class LoopExit extends AbstractEndNode {
         this.loopBegin = loopBegin;
     }
     get label() {
-        return "LoopExit" + "_" + this.index;
+        return "LoopExit";
     }
 }
 exports.LoopExit = LoopExit;
 //用作占位符，用于创建IR图的过程中
 class FakeControlNode extends ControlNode {
     get label() {
-        return "Fake" + "_" + this.index;
+        return "Fake";
     }
     toString() {
         return this.label;
@@ -518,7 +521,6 @@ class IRGenerator extends ast_1.AstVisitor {
         //恢复上下文
         this._graphs.pop();
         this._funcitonSyms.pop();
-        return functionNode;
     }
     visitFunctionDecl(functinDecl, additional) {
         //设置上下文
@@ -546,7 +548,6 @@ class IRGenerator extends ast_1.AstVisitor {
         //恢复上下文
         this._graphs.pop();
         this._funcitonSyms.pop();
-        // return functionNode;
     }
     visitIfStatement(ifStmt, additional) {
         ////条件
@@ -647,28 +648,27 @@ class IRGenerator extends ast_1.AstVisitor {
         }
         //右值：返回DataNode
         else {
-            //如果是参数，获取ParameterNode
-            if (this.functionSym.vars.indexOf(v.sym) < this.functionSym.getNumParams()) {
-                let node = this.graph.getParameterNode(v.name);
-                console_1.assert(node, "in visitVariable, 参数节点不应该为null");
-                return node;
-            }
-            //如果是本地变量，那就要找到它的定义
-            else {
-                console_1.assert(additional instanceof ControlNode, "visitVariable的addtional参数应该是控制流");
-                let beginNode = additional.beginNode;
-                let varProxy = this.getVarProxyFromFlow(beginNode, v.sym);
-                //为merge节点创建PhiNode
-                if (!varProxy) {
-                    if (beginNode instanceof AbstractMergeNode) {
-                        let dataInputs = [];
-                        for (let input of beginNode.inputs) {
-                            let flow = input.beginNode;
-                            let varProxy = this.getVarProxyFromFlow(flow, v.sym);
-                            console_1.assert(varProxy, "创建PhiNode时，应该能查询到merge的每个输入流对应的变量的varSymbol");
-                            let dataNode = this.graph.varProxy2Node.get(varProxy);
-                            dataInputs.push(dataNode);
-                        }
+            console_1.assert(additional instanceof ControlNode, "visitVariable的addtional参数应该是控制流");
+            let beginNode = additional.beginNode;
+            let varProxy = this.getVarProxyFromFlow(beginNode, v.sym);
+            if (!varProxy) {
+                //处理merge节点
+                if (beginNode instanceof AbstractMergeNode) {
+                    let dataInputs = [];
+                    for (let input of beginNode.inputs) {
+                        let flow = input.beginNode;
+                        let varProxy = this.getVarProxyFromFlow(flow, v.sym);
+                        console_1.assert(varProxy, "创建PhiNode时，应该能查询到merge的每个输入流对应的变量的varSymbol");
+                        let dataNode = this.graph.varProxy2Node.get(varProxy);
+                        dataInputs.push(dataNode);
+                    }
+                    //如果变量并没有在分支里出现，而是出现在分支之前的语句中，那么多个分支获得的是同一个DataNode
+                    //比如：
+                    //a = b + c; if() {} else {} d= a+2;  最后一句中的a，引用的是if语句之前的a。
+                    if (this.isSameElements(dataInputs)) {
+                        return dataInputs[0];
+                    }
+                    else {
                         //创建phi节点
                         let phiNode = new PhiNode(beginNode, dataInputs, v.theType);
                         phiNode = this.graph.addDataNode(phiNode);
@@ -677,38 +677,48 @@ class IRGenerator extends ast_1.AstVisitor {
                         this.setVarProxyForFlow(beginNode, v.sym, varProxy);
                         return phiNode;
                     }
-                    else {
-                        console.log("In visitVariable, cannot find var proxy for '" + v.name + "', and not after a merge node");
-                    }
                 }
                 else {
-                    return this.graph.varProxy2Node.get(varProxy);
+                    console.log("In visitVariable, cannot find var proxy for '" + v.name + "', and not after a merge node");
                 }
+            }
+            else {
+                return this.graph.varProxy2Node.get(varProxy);
             }
         }
     }
+    isSameElements(nodes) {
+        let node = nodes[0];
+        for (let i = 1; i < nodes.length; i++) {
+            if (!node.equals(nodes[i]))
+                return false;
+        }
+        return true;
+    }
     visitVariableDecl(variableDecl, additional) {
+        let node = undefined;
         //参数
         if (this.functionSym.vars.indexOf(variableDecl.sym) < this.functionSym.getNumParams()) {
-            let node = new ParameterNode(variableDecl.name, variableDecl.theType);
+            node = new ParameterNode(variableDecl.name, variableDecl.theType);
             this.graph.addDataNode(node);
-            return node;
         }
         //本地变量
         else {
             //生成变量的定义
             if (variableDecl.init) {
-                let node = this.visit(variableDecl.init, additional);
-                // node = this.graph.addDataNode(node);
-                //添加定义，返回一个VarProxy
-                let varProxy = this.graph.addVarDefinition(variableDecl.sym, node);
-                //设置当前流中应该使用哪个Proxy
-                console_1.assert(additional instanceof ControlNode, "visitVariableDecl的addtional参数应该是控制流");
-                let beginNode = additional.beginNode;
-                this.setVarProxyForFlow(beginNode, variableDecl.sym, varProxy);
-                return node;
+                node = this.visit(variableDecl.init, additional);
             }
         }
+        //添加变量定义
+        if (node) {
+            //添加定义，返回一个VarProxy
+            let varProxy = this.graph.addVarDefinition(variableDecl.sym, node);
+            //设置当前流中应该使用哪个Proxy
+            console_1.assert(additional instanceof ControlNode, "visitVariableDecl的addtional参数应该是控制流");
+            let beginNode = additional.beginNode;
+            this.setVarProxyForFlow(beginNode, variableDecl.sym, varProxy);
+        }
+        return node;
     }
     visitBinary(binary, additional) {
         let node;
@@ -760,9 +770,22 @@ class GraphPainter {
             else if (node instanceof DataNode) {
                 fillColor = "orange";
             }
-            let usesStr = (node instanceof DataNode) ? " uses:" + node.uses.length : "";
-            let inputsStr = (node instanceof DataNode) ? " inputs:" + node.inputs.length : "";
-            str += "\tnode" + node.index + " [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + node.label + inputsStr + usesStr + "\""
+            let usesStr = (node instanceof DataNode) ? " u:" + node.uses.length : "";
+            let inputsStr = (node instanceof DataNode) ? " i:" + node.inputs.length : "";
+            let varsStr = "";
+            if (node instanceof DataNode) {
+                for (let varProxy of graph.varProxy2Node.keys()) {
+                    if (graph.varProxy2Node.get(varProxy) == node) {
+                        if (varsStr.length > 0)
+                            varsStr += ", ";
+                        varsStr += varProxy.label;
+                    }
+                }
+            }
+            if (varsStr.length > 0)
+                varsStr = "(" + varsStr + ")";
+            let label = node.index + " " + node.label + varsStr + "\n" + inputsStr + usesStr;
+            str += "\tnode" + node.index + " [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + label + "\""
                 + ", fillcolor=\"" + fillColor + "\""
                 + "]\n";
         }

@@ -89,6 +89,9 @@ class VarProxy{
         this.varSym = varSym;
         this.index = index;
     }
+    get label():string{
+        return this.varSym.name+this.index;
+    }
 }
 
 
@@ -146,7 +149,7 @@ export class ParameterNode extends TerminalNode{
     }
 
     get label():string{
-        return this.name_+"_"+this.index;
+        return "P("+this.name_+")";
     }
 
     toString():string{
@@ -171,7 +174,7 @@ export class ConstantNode extends TerminalNode{
     }
 
     get label():string{
-        return "C_"+this.value+"_"+this.index;
+        return "C("+this.value+")";
     }
 
     toString():string{
@@ -204,7 +207,7 @@ export class BinaryOpNode extends DataNode{
     }
 
     get label():string{
-        return Op[this.op]+"_"+this.index;
+        return Op[this.op];
     }
 
     toString():string{
@@ -240,7 +243,7 @@ export class UnaryOpNode extends DataNode{
     }
 
     get label():string{
-        return Op[this.op]+"_"+this.index;
+        return Op[this.op];
     }
 
     toString():string{
@@ -280,7 +283,7 @@ export class PhiNode extends DataNode{
     }
 
     get label():string{
-        return "PhiNode"+"_"+this.index;
+        return "Phi";
     }
 
     toString():string{
@@ -388,7 +391,7 @@ export class FunctionNode extends AbstractBeginNode{
     }
 
     get label():string{
-        return this.name_+"_"+this.index;
+        return this.name_;
     }
 
     toString():string{
@@ -406,7 +409,7 @@ export class FunctionNode extends AbstractBeginNode{
 //函数开始节点
 export class StartNode extends AbstractBeginNode{
     get label():string{
-        return "Start"+"_"+this.index;
+        return "Start";
     }
 
     toString():string{
@@ -426,7 +429,7 @@ export class ReturnNode extends AbstractEndNode{
     }
 
     get label():string{
-        return "ReturnNode"+"_"+this.index;
+        return "Return";
     }
 
     toString():string{
@@ -452,7 +455,7 @@ export class IfNode extends ControlNode{
     }
 
     get label():string{
-        return "If"+"_"+this.index;
+        return "If";
     }
 
     toString():string{
@@ -473,7 +476,7 @@ export class IfNode extends ControlNode{
 
 export class BeginNode extends AbstractBeginNode{
     get label():string{
-        return "Begin"+"_"+this.index;
+        return "Begin";
     }
 
     toString():string{
@@ -483,19 +486,19 @@ export class BeginNode extends AbstractBeginNode{
 
 export class EndNode extends AbstractEndNode{
     get label():string{
-        return "End"+"_"+this.index;
+        return "End";
     }
 }
 
 export class MergeNode extends AbstractMergeNode{  
     get label():string{
-        return "Merge"+"_"+this.index;
+        return "Merge";
     }
 }
 
 export class LoopBegin extends AbstractMergeNode{  
     get label():string{
-        return "LoopBegin"+"_"+this.index;
+        return "LoopBegin";
     }
 }
 
@@ -508,7 +511,7 @@ export class LoopEnd extends AbstractEndNode{
     }
 
     get label():string{
-        return "LoopEnd"+"_"+this.index;
+        return "LoopEnd";
     }
 }
 
@@ -521,14 +524,14 @@ export class LoopExit extends AbstractEndNode{
     }
 
     get label():string{
-        return "LoopExit"+"_"+this.index;
+        return "LoopExit";
     }
 }
 
 //用作占位符，用于创建IR图的过程中
 class FakeControlNode extends ControlNode{
     get label():string{
-        return "Fake"+"_"+this.index;
+        return "Fake";
     }
     toString():string{
         return this.label;
@@ -624,8 +627,6 @@ export class IRGenerator extends AstVisitor{
         //恢复上下文
         this._graphs.pop();
         this._funcitonSyms.pop();
-
-        return functionNode;
     }
 
     visitFunctionDecl(functinDecl:FunctionDecl, additional:any):any{
@@ -660,8 +661,6 @@ export class IRGenerator extends AstVisitor{
         //恢复上下文
         this._graphs.pop();
         this._funcitonSyms.pop();
-
-        // return functionNode;
     }
 
     visitIfStatement(ifStmt:IfStatement, additional:any):any{
@@ -783,30 +782,29 @@ export class IRGenerator extends AstVisitor{
         }
         //右值：返回DataNode
         else{
-            //如果是参数，获取ParameterNode
-            if (this.functionSym.vars.indexOf(v.sym as VarSymbol) < this.functionSym.getNumParams()){
-                let node = this.graph.getParameterNode(v.name);
-                assert(node, "in visitVariable, 参数节点不应该为null");
-                return node;
-            }
-            //如果是本地变量，那就要找到它的定义
-            else{
-                assert(additional instanceof ControlNode, "visitVariable的addtional参数应该是控制流");
-                let beginNode = (additional as ControlNode).beginNode;
-                let varProxy = this.getVarProxyFromFlow(beginNode, v.sym as VarSymbol);
+            assert(additional instanceof ControlNode, "visitVariable的addtional参数应该是控制流");
+            let beginNode = (additional as ControlNode).beginNode;
+            let varProxy = this.getVarProxyFromFlow(beginNode, v.sym as VarSymbol);
 
-                //为merge节点创建PhiNode
-                if (!varProxy){
-                    if (beginNode instanceof AbstractMergeNode){
-                        let dataInputs:DataNode[] = [];
-                        for (let input of beginNode.inputs){
-                            let flow = input.beginNode;
-                            let varProxy = this.getVarProxyFromFlow(flow, v.sym as VarSymbol);
-                            assert(varProxy, "创建PhiNode时，应该能查询到merge的每个输入流对应的变量的varSymbol");
-                            let dataNode = this.graph.varProxy2Node.get(varProxy as VarProxy) as DataNode;
-                            dataInputs.push(dataNode);
-                        }
+            if (!varProxy){
+                //处理merge节点
+                if (beginNode instanceof AbstractMergeNode){
+                    let dataInputs:DataNode[] = [];
+                    for (let input of beginNode.inputs){
+                        let flow = input.beginNode;
+                        let varProxy = this.getVarProxyFromFlow(flow, v.sym as VarSymbol);
+                        assert(varProxy, "创建PhiNode时，应该能查询到merge的每个输入流对应的变量的varSymbol");
+                        let dataNode = this.graph.varProxy2Node.get(varProxy as VarProxy) as DataNode;
+                        dataInputs.push(dataNode);
+                    }
 
+                    //如果变量并没有在分支里出现，而是出现在分支之前的语句中，那么多个分支获得的是同一个DataNode
+                    //比如：
+                    //a = b + c; if() {} else {} d= a+2;  最后一句中的a，引用的是if语句之前的a。
+                    if (this.isSameElements(dataInputs)){
+                        return dataInputs[0];
+                    }
+                    else{
                         //创建phi节点
                         let phiNode = new PhiNode(beginNode, dataInputs,v.theType as Type);
                         phiNode = this.graph.addDataNode(phiNode) as PhiNode;
@@ -817,42 +815,54 @@ export class IRGenerator extends AstVisitor{
 
                         return phiNode;
                     }
-                    else{
-                        console.log("In visitVariable, cannot find var proxy for '"+v.name+"', and not after a merge node");
-                    }
                 }
-                else{                
-                    return this.graph.varProxy2Node.get(varProxy);
+                else{
+                    console.log("In visitVariable, cannot find var proxy for '"+v.name+"', and not after a merge node");
                 }
+            }
+            else{                
+                return this.graph.varProxy2Node.get(varProxy);
             }
         }
     }
 
+    private isSameElements(nodes:DataNode[]):boolean{
+        let node = nodes[0];
+        for (let i = 1; i< nodes.length; i++){
+            if (!node.equals(nodes[i])) 
+                return false;
+        }
+        return true;
+    }
+
     visitVariableDecl(variableDecl:VariableDecl, additional:any):any{
+        let node:DataNode|undefined = undefined;
+
         //参数
         if (this.functionSym.vars.indexOf(variableDecl.sym as VarSymbol) < this.functionSym.getNumParams()){
-            let node = new ParameterNode(variableDecl.name, variableDecl.theType);
+            node = new ParameterNode(variableDecl.name, variableDecl.theType);
             this.graph.addDataNode(node);
-            return node;
         }
         //本地变量
         else{
             //生成变量的定义
             if (variableDecl.init){
-                let node = this.visit(variableDecl.init, additional) as DataNode;
-                // node = this.graph.addDataNode(node);
-                
-                //添加定义，返回一个VarProxy
-                let varProxy = this.graph.addVarDefinition(variableDecl.sym as VarSymbol, node);
-                
-                //设置当前流中应该使用哪个Proxy
-                assert(additional instanceof ControlNode, "visitVariableDecl的addtional参数应该是控制流");
-                let beginNode = (additional as ControlNode).beginNode;
-                this.setVarProxyForFlow(beginNode,variableDecl.sym as VarSymbol,varProxy);
-
-                return node;
+                node = this.visit(variableDecl.init, additional) as DataNode;
             }
         }
+
+        //添加变量定义
+        if(node){
+            //添加定义，返回一个VarProxy
+            let varProxy = this.graph.addVarDefinition(variableDecl.sym as VarSymbol, node);
+                            
+            //设置当前流中应该使用哪个Proxy
+            assert(additional instanceof ControlNode, "visitVariableDecl的addtional参数应该是控制流");
+            let beginNode = (additional as ControlNode).beginNode;
+            this.setVarProxyForFlow(beginNode,variableDecl.sym as VarSymbol,varProxy);
+        }
+
+        return node;
     }
 
     visitBinary(binary:Binary, additional:any):any{
@@ -913,9 +923,20 @@ export class GraphPainter{
             else if (node instanceof DataNode){
                 fillColor = "orange";
             }
-            let usesStr = (node instanceof DataNode) ? " uses:"+node.uses.length : "";
-            let inputsStr = (node instanceof DataNode) ? " inputs:"+node.inputs.length : "";
-            str += "\tnode"+node.index+" [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + node.label + inputsStr + usesStr  +"\"" 
+            let usesStr = (node instanceof DataNode) ? " u:"+node.uses.length : "";
+            let inputsStr = (node instanceof DataNode) ? " i:"+node.inputs.length : "";
+            let varsStr = "";
+            if (node instanceof DataNode){
+                for (let varProxy of graph.varProxy2Node.keys()){
+                    if (graph.varProxy2Node.get(varProxy) == node){
+                        if (varsStr.length>0) varsStr += ", ";
+                        varsStr+=varProxy.label;
+                    }
+                }
+            }
+            if (varsStr.length>0) varsStr = "("+varsStr+")";
+            let label = node.index + " "+ node.label + varsStr + "\n" + inputsStr + usesStr;
+            str += "\tnode"+node.index+" [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + label +"\"" 
                    + ", fillcolor=\"" + fillColor + "\""
                    + "]\n"
         }
