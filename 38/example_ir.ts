@@ -1,7 +1,8 @@
 function foo(a:number, b:number):number{
     let x:number;
+    let c = a+b;
     if (a>10){
-      x = a + b;
+      x = a + c;
     }
     else{
       x = a - b;

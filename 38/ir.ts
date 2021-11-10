@@ -269,6 +269,10 @@ export class PhiNode extends DataNode{
         super(theType);
         this.mergeNode = mergeNode;
         this.inputs_=inputs;
+
+        for (let input of inputs){
+            input.uses.push(this);
+        }
     }
 
     get inputs():DataNode[]{
@@ -664,9 +668,22 @@ export class IRGenerator extends AstVisitor{
         ////条件
         let conditionNode = this.visit(ifStmt.condition, additional) as DataNode;
 
-        ////true分支        
+        ////创建true分支        
         let begin1 = new BeginNode(new FakeControlNode());
         this.graph.addControlNode(begin1);
+
+        ////创建false分支        
+        let begin2 = new BeginNode(new FakeControlNode());
+        this.graph.addControlNode(begin2);
+
+        ////创建IfNode
+        let ifNode = new IfNode(conditionNode,begin1, begin2);
+        this.graph.addControlNode(ifNode);
+
+        assert(additional instanceof UniSuccessorNode, "in visitIfStatement, prev node should be UniSuccessorNode");
+        (additional as UniSuccessorNode).next = ifNode;
+
+        //遍历true分枝
         let next1 = this.visit(ifStmt.stmt, begin1);
         let end1 = new EndNode();
         this.graph.addControlNode(end1);
@@ -677,10 +694,11 @@ export class IRGenerator extends AstVisitor{
             begin1.next = end1;
         }
         
-        ////false分支        
-        let begin2 = new BeginNode(new FakeControlNode());
-        this.graph.addControlNode(begin2);
-        let next2 = this.visit(ifStmt.stmt, begin2);
+        ////遍历false分支        
+        let next2:ControlNode|null = null;
+        if (ifStmt.elseStmt) {
+            next2 = this.visit(ifStmt.elseStmt, begin2);
+        }
         let end2 = new EndNode();
         this.graph.addControlNode(end2);
         if(next2 instanceof UniSuccessorNode){
@@ -690,13 +708,6 @@ export class IRGenerator extends AstVisitor{
             begin2.next = end2;
         }
         
-        ////创建IfNode
-        let ifNode = new IfNode(conditionNode,begin1, begin2);
-        this.graph.addControlNode(ifNode);
-
-        assert(additional instanceof UniSuccessorNode, "in visitIfStatement, prev node should be UniSuccessorNode");
-        (additional as UniSuccessorNode).next = ifNode;
-
         ////创建Merge节点
         let mergeNode = new MergeNode([end1,end2],new FakeControlNode());
         this.graph.addControlNode(mergeNode);
@@ -829,7 +840,7 @@ export class IRGenerator extends AstVisitor{
             //生成变量的定义
             if (variableDecl.init){
                 let node = this.visit(variableDecl.init, additional) as DataNode;
-                node = this.graph.addDataNode(node);
+                // node = this.graph.addDataNode(node);
                 
                 //添加定义，返回一个VarProxy
                 let varProxy = this.graph.addVarDefinition(variableDecl.sym as VarSymbol, node);
@@ -850,11 +861,9 @@ export class IRGenerator extends AstVisitor{
         //如果是赋值，那要看看是否需要生成新的变量，以符合SSA
         if(binary.op == Op.Assign){
             let left = this.visit(binary.exp1, additional) as VarSymbol;
-            let right = this.visit(binary.exp2, additional) as DataNode;
+            node = this.visit(binary.exp2, additional) as DataNode;
             assert(left instanceof VarSymbol, "在VisitBinary中，=左边应该返回一个VarSymbol");
-            assert(right instanceof DataNode, "在VisitBinary中，=左边应该是一个DataNode");
-
-            node = this.graph.addDataNode(right);
+            assert(node instanceof DataNode, "在VisitBinary中，=左边应该是一个DataNode");
 
             //添加定义，返回一个VarProxy。如果该变量多次被定义，那么会返回多个不同版本的VarProxy
             let varProxy = this.graph.addVarDefinition(left, node);

@@ -723,7 +723,7 @@ function compileAndRun(args) {
             irGenerator.visit(prog);
             //做优化
             let optimizer = new ir_1.DeadCodeElimination();
-            optimizer.optimize(irModule);
+            // optimizer.optimize(irModule);
             //针对每个函数生成一个.dot文件
             console.log("输出IR到.dot文件：");
             for (let funSym of irModule.fun2Graph.keys()) {

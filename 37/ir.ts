@@ -6,7 +6,7 @@
 import { Type } from "./types";
 import { VarSymbol, FunctionSymbol } from "./symbol";
 import { Op } from "./scanner";
-import { AstVisitor, Prog, FunctionDecl, IntegerLiteral, DecimalLiteral, StringLiteral, BooleanLiteral, NullLiteral, Variable, Binary, VariableDecl, AstNode, Block, IfStatement, ReturnStatement } from "./ast";
+import { AstVisitor, Prog, FunctionDecl, IntegerLiteral, DecimalLiteral, StringLiteral, BooleanLiteral, NullLiteral, Variable, Binary, VariableDecl, AstNode, Block, IfStatement, ReturnStatement, ForStatement } from "./ast";
 import { assert, timeStamp } from "console";
 import { Scope } from "./scope";
 
@@ -31,6 +31,23 @@ export class Graph{
         this.nodes.push(node);
         node.index = this.nextIndex++;
         return node;
+    }
+
+    removeDataNode(node:DataNode):void{
+        let index = this.nodes.indexOf(node);
+        this.nodes.splice(index,1);
+        //从use-def链中删掉节点
+        //todo:如果if条件和return引用了该节点呢？
+        for(let n of this.nodes){
+            if (n instanceof DataNode){
+                //从inputs中删掉
+                let i = n.inputs.indexOf(node);
+                if (i != -1) n.inputs.splice(i,1);
+                //从uses中删掉
+                i = n.uses.indexOf(node);
+                if (i != -1) n.uses.splice(i,1);
+            }
+        }
     }
 
     addControlNode(node:ControlNode):ControlNode{
@@ -98,7 +115,7 @@ export abstract class DataNode extends IRNode{
     abstract get inputs():DataNode[];
 
     //使用该节点的节点，形成use-def链,自动维护
-    uses:DataNode[] = []; 
+    uses:IRNode[] = []; 
 
     //数据类型
     theType:Type;   
@@ -252,6 +269,10 @@ export class PhiNode extends DataNode{
         super(theType);
         this.mergeNode = mergeNode;
         this.inputs_=inputs;
+
+        for (let input of inputs){
+            input.uses.push(this);
+        }
     }
 
     get inputs():DataNode[]{
@@ -400,6 +421,8 @@ export class ReturnNode extends AbstractEndNode{
     constructor(value:DataNode|null){
         super();
         this.value = value;
+
+        this.value?.uses.push(this);
     }
 
     get label():string{
@@ -423,6 +446,7 @@ export class IfNode extends ControlNode{
         this.trueBranch = thenBranch;
         this.falseBranch = elseBranch;
 
+        this.condition.uses.push(this);
         thenBranch.predecessor=this;
         elseBranch.predecessor=this;
     }
@@ -644,9 +668,22 @@ export class IRGenerator extends AstVisitor{
         ////条件
         let conditionNode = this.visit(ifStmt.condition, additional) as DataNode;
 
-        ////true分支        
+        ////创建true分支        
         let begin1 = new BeginNode(new FakeControlNode());
         this.graph.addControlNode(begin1);
+
+        ////创建false分支        
+        let begin2 = new BeginNode(new FakeControlNode());
+        this.graph.addControlNode(begin2);
+
+        ////创建IfNode
+        let ifNode = new IfNode(conditionNode,begin1, begin2);
+        this.graph.addControlNode(ifNode);
+
+        assert(additional instanceof UniSuccessorNode, "in visitIfStatement, prev node should be UniSuccessorNode");
+        (additional as UniSuccessorNode).next = ifNode;
+
+        //遍历true分枝
         let next1 = this.visit(ifStmt.stmt, begin1);
         let end1 = new EndNode();
         this.graph.addControlNode(end1);
@@ -657,10 +694,11 @@ export class IRGenerator extends AstVisitor{
             begin1.next = end1;
         }
         
-        ////false分支        
-        let begin2 = new BeginNode(new FakeControlNode());
-        this.graph.addControlNode(begin2);
-        let next2 = this.visit(ifStmt.stmt, begin2);
+        ////遍历false分支        
+        let next2:ControlNode|null = null;
+        if (ifStmt.elseStmt) {
+            next2 = this.visit(ifStmt.elseStmt, begin2);
+        }
         let end2 = new EndNode();
         this.graph.addControlNode(end2);
         if(next2 instanceof UniSuccessorNode){
@@ -670,13 +708,6 @@ export class IRGenerator extends AstVisitor{
             begin2.next = end2;
         }
         
-        ////创建IfNode
-        let ifNode = new IfNode(conditionNode,begin1, begin2);
-        this.graph.addControlNode(ifNode);
-
-        assert(additional instanceof UniSuccessorNode, "in visitIfStatement, prev node should be UniSuccessorNode");
-        (additional as UniSuccessorNode).next = ifNode;
-
         ////创建Merge节点
         let mergeNode = new MergeNode([end1,end2],new FakeControlNode());
         this.graph.addControlNode(mergeNode);
@@ -809,7 +840,7 @@ export class IRGenerator extends AstVisitor{
             //生成变量的定义
             if (variableDecl.init){
                 let node = this.visit(variableDecl.init, additional) as DataNode;
-                node = this.graph.addDataNode(node);
+                // node = this.graph.addDataNode(node);
                 
                 //添加定义，返回一个VarProxy
                 let varProxy = this.graph.addVarDefinition(variableDecl.sym as VarSymbol, node);
@@ -830,11 +861,9 @@ export class IRGenerator extends AstVisitor{
         //如果是赋值，那要看看是否需要生成新的变量，以符合SSA
         if(binary.op == Op.Assign){
             let left = this.visit(binary.exp1, additional) as VarSymbol;
-            let right = this.visit(binary.exp2, additional) as DataNode;
+            node = this.visit(binary.exp2, additional) as DataNode;
             assert(left instanceof VarSymbol, "在VisitBinary中，=左边应该返回一个VarSymbol");
-            assert(right instanceof DataNode, "在VisitBinary中，=左边应该是一个DataNode");
-
-            node = this.graph.addDataNode(right);
+            assert(node instanceof DataNode, "在VisitBinary中，=左边应该是一个DataNode");
 
             //添加定义，返回一个VarProxy。如果该变量多次被定义，那么会返回多个不同版本的VarProxy
             let varProxy = this.graph.addVarDefinition(left, node);
@@ -855,7 +884,14 @@ export class IRGenerator extends AstVisitor{
         return node;
     }
 
+    visitForStatement(forStmt:ForStatement){
+        //todo
+    }
+
 }
+
+////////////////////////////////////////////////////////////////////////////////////
+//生成.dot图
 
 /**
  * 把Graph生成点图
@@ -877,8 +913,9 @@ export class GraphPainter{
             else if (node instanceof DataNode){
                 fillColor = "orange";
             }
-            
-            str += "\tnode"+node.index+" [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + node.label +"\"" 
+            let usesStr = (node instanceof DataNode) ? " uses:"+node.uses.length : "";
+            let inputsStr = (node instanceof DataNode) ? " inputs:"+node.inputs.length : "";
+            str += "\tnode"+node.index+" [ shape=\"box\", style=\"filled\", color=\"black\", label=\"" + node.label + inputsStr + usesStr  +"\"" 
                    + ", fillcolor=\"" + fillColor + "\""
                    + "]\n"
         }
@@ -918,6 +955,47 @@ export class GraphPainter{
         }
         str +="}\n";
         return str;
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////////
+//用于优化的pass
+export abstract class OptimizationPass{
+    abstract optimize(m:IRModule):void;
+}
+
+//死代码删除
+export class DeadCodeElimination extends OptimizationPass{
+    optimize(m:IRModule):void{
+        for(let fun of m.fun2Graph.keys()){
+            let graph = m.fun2Graph.get(fun) as Graph;
+            this.handleGraph(graph);
+        }
+    }
+
+    /**
+     * 查找graph中的节点，把uses为空的节点删掉
+     * 注意：删除一个节点可以导致另一个节点的uses为空。
+     * @param graph 
+     */
+    private handleGraph(graph:Graph){
+        let shouldContinue = true;
+        while(shouldContinue){
+            let deadNodes:DataNode[] = [];
+            for (let node of graph.nodes){
+                if(node instanceof DataNode && node.uses.length == 0){
+                    deadNodes.push(node);
+                }
+            }
+
+            //是否应该继续循环
+            shouldContinue = deadNodes.length>0;
+
+            //删掉死节点
+            for (let node of deadNodes){
+                graph.removeDataNode(node);
+            }
+        }
     }
 }
 

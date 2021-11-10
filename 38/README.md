@@ -8,7 +8,7 @@
 example_opt1.ts  测试本地优化功能。
 运行：node play example_opt1.ts --dumpIR
 运行结果会生成.dot文件，可以用graphviz或vscode查看（用预览模式可以看到图形）。  
-在图形中，为每个DataNode显示了inputs和uses的数量  
+在图形中，为每个DataNode显示了inputs和uses的数量。  
 
 #### 环境配置注意事项
 

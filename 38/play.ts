@@ -796,7 +796,7 @@ function compileAndRun(args:CommandArgs){
 
             //做优化
             let optimizer = new DeadCodeElimination();
-            optimizer.optimize(irModule);
+            // optimizer.optimize(irModule);
 
             //针对每个函数生成一个.dot文件
             console.log("输出IR到.dot文件：");
