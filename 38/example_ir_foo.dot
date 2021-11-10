@@ -1,0 +1,36 @@
+digraph{
+	node0 [ shape="box", style="filled", color="black", label="Start_0", fillcolor="lightblue"]
+	node1 [ shape="box", style="filled", color="black", label="a_1", fillcolor="orange"]
+	node2 [ shape="box", style="filled", color="black", label="b_2", fillcolor="orange"]
+	node3 [ shape="box", style="filled", color="black", label="C_10_3", fillcolor="orange"]
+	node4 [ shape="box", style="filled", color="black", label="G_4", fillcolor="orange"]
+	node5 [ shape="box", style="filled", color="black", label="Begin_5", fillcolor="lightblue"]
+	node6 [ shape="box", style="filled", color="black", label="Plus_6", fillcolor="orange"]
+	node7 [ shape="box", style="filled", color="black", label="End_7", fillcolor="lightblue"]
+	node8 [ shape="box", style="filled", color="black", label="Begin_8", fillcolor="lightblue"]
+	node9 [ shape="box", style="filled", color="black", label="End_9", fillcolor="lightblue"]
+	node10 [ shape="box", style="filled", color="black", label="If_10", fillcolor="lightblue"]
+	node11 [ shape="box", style="filled", color="black", label="Merge_11", fillcolor="lightblue"]
+	node12 [ shape="box", style="filled", color="black", label="PhiNode_12", fillcolor="orange"]
+	node13 [ shape="box", style="filled", color="black", label="ReturnNode_13", fillcolor="lightblue"]
+	node14 [ shape="box", style="filled", color="black", label="foo_14", fillcolor="lightgreen"]
+
+	node0 -> node10 [color="blue"]
+	node4 -> node1 [color="orange"]
+	node4 -> node3 [color="orange"]
+	node5 -> node7 [color="blue"]
+	node6 -> node1 [color="orange"]
+	node6 -> node2 [color="orange"]
+	node8 -> node9 [color="blue"]
+	node10 -> node4
+	node10 -> node5 [color="blue"]
+	node10 -> node8 [color="blue"]
+	node11 -> node13 [color="blue"]
+	node11 -> node7
+	node11 -> node9
+	node12 -> node6 [color="orange"]
+	node12 -> node6 [color="orange"]
+	node12 -> node11
+	node13 -> node12
+	node14 -> node0 [color="blue"]
+}
