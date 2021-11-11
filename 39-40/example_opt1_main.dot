@@ -1,0 +1,8 @@
+digraph{
+	node0 [ shape="box", style="filled", color="black", label="Start_0", fillcolor="lightblue"]
+	node1 [ shape="box", style="filled", color="black", label="ReturnNode_1", fillcolor="lightblue"]
+	node2 [ shape="box", style="filled", color="black", label="main_2", fillcolor="lightgreen"]
+
+	node0 -> node1 [color="blue"]
+	node2 -> node0 [color="blue"]
+}

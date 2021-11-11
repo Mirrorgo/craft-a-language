@@ -1,0 +1,21 @@
+digraph{
+	node0 [ shape="box", style="filled", color="black", label="Start_0", fillcolor="lightblue"]
+	node1 [ shape="box", style="filled", color="black", label="a_1", fillcolor="orange"]
+	node2 [ shape="box", style="filled", color="black", label="b_2", fillcolor="orange"]
+	node3 [ shape="box", style="filled", color="black", label="Plus_3", fillcolor="orange"]
+	node4 [ shape="box", style="filled", color="black", label="C_10_4", fillcolor="orange"]
+	node5 [ shape="box", style="filled", color="black", label="Plus_5", fillcolor="orange"]
+	node6 [ shape="box", style="filled", color="black", label="Minus_6", fillcolor="orange"]
+	node7 [ shape="box", style="filled", color="black", label="ReturnNode_7", fillcolor="lightblue"]
+	node8 [ shape="box", style="filled", color="black", label="copyPropagation2_8", fillcolor="lightgreen"]
+
+	node0 -> node7 [color="blue"]
+	node3 -> node1 [color="orange"]
+	node3 -> node2 [color="orange"]
+	node5 -> node3 [color="orange"]
+	node5 -> node4 [color="orange"]
+	node6 -> node5 [color="orange"]
+	node6 -> node3 [color="orange"]
+	node7 -> node6
+	node8 -> node0 [color="blue"]
+}

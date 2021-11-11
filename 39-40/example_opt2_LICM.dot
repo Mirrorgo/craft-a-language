@@ -1,0 +1,30 @@
+digraph{
+	node0 [ shape="box", style="filled", color="black", label="0 Start\n", fillcolor="lightblue"]
+	node1 [ shape="box", style="filled", color="black", label="1 P(a)(a0)\n i:0 u:1", fillcolor="orange"]
+	node2 [ shape="box", style="filled", color="black", label="2 C(0)(b0, i0)\n i:0 u:3", fillcolor="orange"]
+	node3 [ shape="box", style="filled", color="black", label="3 End\n", fillcolor="lightblue"]
+	node4 [ shape="box", style="filled", color="black", label="4 LoopBegin\n", fillcolor="lightblue"]
+	node5 [ shape="box", style="filled", color="black", label="5 LoopExit\n", fillcolor="lightblue"]
+	node6 [ shape="box", style="filled", color="black", label="6 L\n i:2 u:1", fillcolor="orange"]
+	node7 [ shape="box", style="filled", color="black", label="7 Begin\n", fillcolor="lightblue"]
+	node8 [ shape="box", style="filled", color="black", label="8 If\n", fillcolor="lightblue"]
+	node9 [ shape="box", style="filled", color="black", label="9 C(1)\n i:0 u:1", fillcolor="orange"]
+	node10 [ shape="box", style="filled", color="black", label="10 LoopEnd\n", fillcolor="lightblue"]
+	node11 [ shape="box", style="filled", color="black", label="11 Return\n", fillcolor="lightblue"]
+	node12 [ shape="box", style="filled", color="black", label="12 LICM\n", fillcolor="lightgreen"]
+
+	node0 -> node3 [color="blue"]
+	node4 -> node8 [color="blue"]
+	node4 -> node3
+	node5 -> node11 [color="blue"]
+	node5 -> node4
+	node6 -> node2 [color="orange"]
+	node6 -> node1 [color="orange"]
+	node7 -> node10 [color="blue"]
+	node8 -> node6
+	node8 -> node7 [color="blue"]
+	node8 -> node5 [color="blue"]
+	node10 -> node4
+	node11 -> node2
+	node12 -> node0 [color="blue"]
+}

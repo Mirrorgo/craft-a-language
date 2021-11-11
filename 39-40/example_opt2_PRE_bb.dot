@@ -1,0 +1,50 @@
+digraph{
+	node0 [ shape="box", style="filled", color="black", label="0 Start\n", fillcolor="lightblue"]
+	node1 [ shape="box", style="filled", color="black", label="1 P(x)(x0)\n i:0 u:3", fillcolor="orange"]
+	node2 [ shape="box", style="filled", color="black", label="2 C(0)(y0)\n i:0 u:2", fillcolor="orange"]
+	node3 [ shape="box", style="filled", color="black", label="3 G\n i:2 u:1", fillcolor="orange"]
+	node4 [ shape="box", style="filled", color="black", label="4 Begin\n", fillcolor="lightblue"]
+	node5 [ shape="box", style="filled", color="black", label="5 Begin\n", fillcolor="lightblue"]
+	node6 [ shape="box", style="filled", color="black", label="6 If\n", fillcolor="lightblue"]
+	node7 [ shape="box", style="filled", color="black", label="7 C(4)\n i:0 u:2", fillcolor="orange"]
+	node8 [ shape="box", style="filled", color="black", label="8 Plus(y1, z0)\n i:2 u:2", fillcolor="orange"]
+	node9 [ shape="box", style="filled", color="black", label="9 End\n", fillcolor="lightblue"]
+	node10 [ shape="box", style="filled", color="black", label="10 End\n", fillcolor="lightblue"]
+	node11 [ shape="box", style="filled", color="black", label="11 Merge\n", fillcolor="lightblue"]
+	node12 [ shape="box", style="filled", color="black", label="12 Phi(y2)\n i:2 u:1", fillcolor="orange"]
+	node13 [ shape="box", style="filled", color="black", label="13 Plus\n i:2 u:1", fillcolor="orange"]
+	node14 [ shape="box", style="filled", color="black", label="14 Return\n", fillcolor="lightblue"]
+	node15 [ shape="box", style="filled", color="black", label="15 PRE\n", fillcolor="lightgreen"]
+
+	subgraph cluster_b0{
+		node15 -> node0 [color="blue"]
+		node0 -> node6 [color="blue"]
+		node6 -> node3
+		node3 -> node1 [color="orange"]
+		node3 -> node2 [color="orange"]
+		node8 -> node1 [color="orange"]
+		node8 -> node7 [color="orange"]
+	}
+	subgraph cluster_b1{
+		node6 -> node4 [color="blue"]
+		node4 -> node9 [color="blue"]
+	}
+	subgraph cluster_b2{
+		node6 -> node5 [color="blue"]
+		node5 -> node10 [color="blue"]
+		
+	}
+	subgraph cluster_b3{
+		
+		node11 -> node14 [color="blue"]
+		node11 -> node9
+		node11 -> node10
+		node12 -> node8 [color="orange"]
+		node12 -> node2 [color="orange"]
+		node12 -> node11
+		node13 -> node12 [color="orange"]
+		node13 -> node8 [color="orange"]
+		node14 -> node13
+	}
+
+}

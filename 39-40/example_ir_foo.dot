@@ -1,0 +1,42 @@
+digraph{
+	node0 [ shape="box", style="filled", color="black", label="0 Start\n", fillcolor="lightblue"]
+	node1 [ shape="box", style="filled", color="black", label="1 P(a)(a0)\n i:0 u:4", fillcolor="orange"]
+	node2 [ shape="box", style="filled", color="black", label="2 P(b)(b0)\n i:0 u:2", fillcolor="orange"]
+	node3 [ shape="box", style="filled", color="black", label="3 Plus(c0)\n i:2 u:1", fillcolor="orange"]
+	node4 [ shape="box", style="filled", color="black", label="4 C(10)\n i:0 u:1", fillcolor="orange"]
+	node5 [ shape="box", style="filled", color="black", label="5 G\n i:2 u:1", fillcolor="orange"]
+	node6 [ shape="box", style="filled", color="black", label="6 Begin\n", fillcolor="lightblue"]
+	node7 [ shape="box", style="filled", color="black", label="7 Begin\n", fillcolor="lightblue"]
+	node8 [ shape="box", style="filled", color="black", label="8 If\n", fillcolor="lightblue"]
+	node9 [ shape="box", style="filled", color="black", label="9 Plus(x0)\n i:2 u:1", fillcolor="orange"]
+	node10 [ shape="box", style="filled", color="black", label="10 End\n", fillcolor="lightblue"]
+	node11 [ shape="box", style="filled", color="black", label="11 Minus(x1)\n i:2 u:1", fillcolor="orange"]
+	node12 [ shape="box", style="filled", color="black", label="12 End\n", fillcolor="lightblue"]
+	node13 [ shape="box", style="filled", color="black", label="13 Merge\n", fillcolor="lightblue"]
+	node14 [ shape="box", style="filled", color="black", label="14 Phi(x2)\n i:2 u:1", fillcolor="orange"]
+	node15 [ shape="box", style="filled", color="black", label="15 Return\n", fillcolor="lightblue"]
+	node16 [ shape="box", style="filled", color="black", label="16 foo\n", fillcolor="lightgreen"]
+
+	node0 -> node8 [color="blue"]
+	node3 -> node1 [color="orange"]
+	node3 -> node2 [color="orange"]
+	node5 -> node1 [color="orange"]
+	node5 -> node4 [color="orange"]
+	node6 -> node10 [color="blue"]
+	node7 -> node12 [color="blue"]
+	node8 -> node5
+	node8 -> node6 [color="blue"]
+	node8 -> node7 [color="blue"]
+	node9 -> node1 [color="orange"]
+	node9 -> node3 [color="orange"]
+	node11 -> node1 [color="orange"]
+	node11 -> node2 [color="orange"]
+	node13 -> node15 [color="blue"]
+	node13 -> node10
+	node13 -> node12
+	node14 -> node9 [color="orange"]
+	node14 -> node11 [color="orange"]
+	node14 -> node13
+	node15 -> node14
+	node16 -> node0 [color="blue"]
+}
