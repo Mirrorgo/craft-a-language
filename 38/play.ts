@@ -796,15 +796,15 @@ function compileAndRun(args:CommandArgs){
 
             //做优化
             let optimizer = new DeadCodeElimination();
-            optimizer.optimize(irModule);
+            // optimizer.optimize(irModule);
 
             //针对每个函数生成一个.dot文件
             console.log("输出IR到.dot文件：");
             for (let funSym of irModule.fun2Graph.keys()){
-                let graph = irModule.fun2Graph.get(funSym) as Graph;
-                let str = GraphPainter.toDot(graph);
                 let dotFileName = args.fileNameWithoutPostfix + "_" + funSym.name + ".dot";
                 console.log("  "+dotFileName+"...");
+                let graph = irModule.fun2Graph.get(funSym) as Graph;
+                let str = GraphPainter.toDot(graph);
                 writeTextFile(dotFileName, str);
             }
             console.log("输出IR完毕，请用graphviz或vscode查看.dot文件。");

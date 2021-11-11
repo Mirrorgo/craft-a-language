@@ -1887,7 +1887,7 @@ class LiveAnalyzer extends SemanticAstVisitor{
      * @param prog 
      */
     visitProg(prog:Prog):any{
-        let alive = super.visitBlock(prog);
+        let alive = this.visitBlock(prog);
 
         //如果主程序没有return语句，那么在最后面加一下。
         if (alive){
@@ -1904,15 +1904,24 @@ class LiveAnalyzer extends SemanticAstVisitor{
         let sym = functionDecl.sym as FunctionSymbol;
         let functionType = sym.theType as FunctionType;
        
-        if (functionType.returnType != SysTypes.Any && functionType.returnType != SysTypes.Void && functionType.returnType != SysTypes.Undefined){
-            alive = super.visitBlock(functionDecl.body);
-        }
-        else{
-            alive = false;
-        }
+        // if (functionType.returnType != SysTypes.Any && functionType.returnType != SysTypes.Void && functionType.returnType != SysTypes.Undefined){
+        //     alive = this.visitBlock(functionDecl.body);
+        // }
+        // else{
+        //     alive = false;
+        // }
+
+        alive = this.visitBlock(functionDecl.body);
 
         if (alive){
-            this.addError("Function lacks ending return statement and return type does not include 'undefined'.", functionDecl);
+            //如果返回值为void、undefined或any，那可以自动添加一个Return语句。否则就报错。
+            //todo：不严谨，没有考虑联合类型的情况
+            if(functionType.returnType == SysTypes.Any || functionType.returnType == SysTypes.Void || functionType.returnType == SysTypes.Undefined){
+                functionDecl.body.stmts.push(new ReturnStatement(functionDecl.body.endPos, functionDecl.body.endPos, null));
+            }
+            else{
+                this.addError("Function lacks ending return statement and return type does not include 'undefined'.", functionDecl);
+            }
         }
         return true;  //对于上层的block来说，仍然要继续执行
     }
