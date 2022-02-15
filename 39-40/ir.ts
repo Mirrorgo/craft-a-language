@@ -14,12 +14,17 @@ import { Scope } from "./scope";
 export class Graph{
     //所有节点的列表
     nodes:IRNode[] =[];
+    phiNodes:PhiNode[] =[];
 
     //笑一个节点的序号
     nextIndex:number = 0; 
 
     //变量跟Node的映射
     varProxy2Node:Map<VarProxy, IRNode>= new Map();
+
+    addPhiNode(phi:PhiNode) {
+        this.phiNodes.push(phi);
+    }
 
     addNode(node:IRNode){
         //对于数据流，如果没有同样的节点，就添加进去。否则，就返回原来的节点
@@ -116,14 +121,19 @@ export abstract class IRNode{
 }
 
 export abstract class FloatingNode extends IRNode{
+    inputs_:FloatingNode[] = [];
+    get inputs():FloatingNode[] {
+        return this.inputs_;
+    }
+
     abstract equals(ndoe:FloatingNode):boolean;
 }
 
 //端点，没有successor，比如变量和常量
 export abstract class TerminalNode extends FloatingNode{
-    get inputs():IRNode[]{
-        return [];
-    }
+    // get inputs():IRNode[]{
+    //     return [];
+    // }
 }
 
 //参数
@@ -178,19 +188,22 @@ export class ConstantNode extends TerminalNode{
 
 //二元运算节点
 export class BinaryOpNode extends FloatingNode{
-    left:FloatingNode;
-    right:FloatingNode;
+    // left:FloatingNode;
+    // right:FloatingNode;
     op:Op;
 
     constructor(left:FloatingNode, right:FloatingNode, op:Op){
         super();
-        this.left = left;
-        this.right = right;
+        // this.left = left;
+        // this.right = right;
         this.op = op;
 
         //自动建立双向的use-def链
         left.uses.push(this);
         right.uses.push(this);
+
+        this.inputs_.push(left);
+        this.inputs_.push(right);
     }
 
     get label():string{
@@ -201,9 +214,17 @@ export class BinaryOpNode extends FloatingNode{
         return this.label+"(left->"+this.left.label+",right->"+this.right.label+")";
     }
 
-    get inputs():IRNode[]{
-        return [this.left, this.right];
+    get left():FloatingNode {
+        return this.inputs_[0];
     }
+
+    get right():FloatingNode {
+        return this.inputs_[1];
+    }
+
+    // get inputs():IRNode[]{
+    //     return [this.left, this.right];
+    // }
 
     equals(node:FloatingNode):boolean{
         if (node instanceof BinaryOpNode){
@@ -216,18 +237,23 @@ export class BinaryOpNode extends FloatingNode{
 
 //一元运算节点
 export class UnaryOpNode extends FloatingNode{
-    data:FloatingNode;
+    // data:FloatingNode;
     op:Op;
     isPrefix:boolean;
 
     constructor(data:FloatingNode, op:Op, isPrefix:boolean){
         super();
-        this.data = data;
+        // this.data = data;
+        this.inputs_.push(data);
         this.op = op;
         this.isPrefix= isPrefix;
 
         //自动建立双向的use-def链
         data.uses.push(this);
+    }
+
+    get data():FloatingNode {
+        return this.inputs_[0];
     }
 
     get label():string{
@@ -241,9 +267,9 @@ export class UnaryOpNode extends FloatingNode{
             + ")";
     }
 
-    get inputs():IRNode[]{
-        return [this.data];
-    }
+    // get inputs():IRNode[]{
+    //     return [this.data];
+    // }
 
     equals(node:FloatingNode):boolean{
         if (node instanceof UnaryOpNode){
@@ -255,7 +281,7 @@ export class UnaryOpNode extends FloatingNode{
 
 export class PhiNode extends FloatingNode{
     mergeNode:MergeNode;
-    inputs_:FloatingNode[];
+    // inputs_:FloatingNode[];
     public varSymbol:VarSymbol;
     constructor(mergeNode:MergeNode, inputs:FloatingNode[], varSymbol:VarSymbol){
         super();
@@ -268,9 +294,9 @@ export class PhiNode extends FloatingNode{
         }
     }
 
-    get inputs():IRNode[]{
-        return this.inputs_;
-    }
+    // get inputs():IRNode[]{
+    //     return this.inputs_;
+    // }
 
     get label():string{
         return "Phi";
@@ -302,20 +328,24 @@ export class PhiNode extends FloatingNode{
 //函数调用返回的数据
 export class CallTargetNode extends FloatingNode{
     functionSym:FunctionSymbol;
-    args:FloatingNode[];
+    // args:FloatingNode[];
     constructor(functionSym:FunctionSymbol, args:FloatingNode[]){
         super(); 
         this.functionSym = functionSym;
-        this.args=args;
+        this.inputs_=args;
 
         for (let input of args){
             input.uses.push(this);
         }
     }
 
-    get inputs():IRNode[]{
-        return this.args;
+    get args():FloatingNode[] {
+        return this.inputs_;
     }
+
+    // get inputs():IRNode[]{
+    //     return this.args;
+    // }
 
     get label():string{
         return "CallTarget";
@@ -740,7 +770,8 @@ export class IRGenerator extends AstVisitor{
                 // else{
                     //创建phi节点
                     let phiNode = new PhiNode(mergeNode, [], varSym);
-                    phiNode = this.graph.addNode(phiNode) as PhiNode;
+                    // phiNode = this.graph.addNode(phiNode) as PhiNode;
+                    this.graph.addPhiNode(phiNode);
     
                     //创建新的VarSymbol，并跟当前的Flow绑定。
                     varProxy = this.graph.addVarDefinition(varSym, phiNode);
@@ -1172,21 +1203,93 @@ export class IRGenerator extends AstVisitor{
     }
 
     private updatePhiNodes() {
-        for (let node of this.graph.nodes) {
-            if (node instanceof PhiNode) {
-                let dataInputs: FloatingNode[] = [];
-                // let varProxys:VarProxy[] = [];
-                for (let input of node.mergeNode.inputs) {
-                    let flow = input.beginNode;
-                    let varProxy = this.getVarProxyFromFlow(flow, node.varSymbol);
-                    // varProxys.push(varProxy as VarProxy);
-                    assert(varProxy, "创建PhiNode时，应该能查询到merge的每个输入流对应的变量的varSymbol");
-                    let dataNode = this.graph.varProxy2Node.get(varProxy as VarProxy) as FloatingNode;
-                    dataNode.uses.push(node);
-                    dataInputs.push(dataNode);
-                }
-                node.inputs_ = dataInputs;
+        for (let phi of this.graph.phiNodes) {
+            let dataInputs: FloatingNode[] = [];
+            for (let input of phi.mergeNode.inputs) {
+                let flow = input.beginNode;
+                let varProxy = this.getVarProxyFromFlow(flow, phi.varSymbol);
+                assert(varProxy, "创建PhiNode时，应该能查询到merge的每个输入流对应的变量的varSymbol");
+                let dataNode = this.graph.varProxy2Node.get(varProxy as VarProxy) as FloatingNode;
+                dataNode.uses.push(phi);
+                dataInputs.push(dataNode);
             }
+            phi.inputs_ = dataInputs;
+        }
+
+        let changed:boolean = true;
+        while (changed) {
+            changed = false;
+            for (let phi of this.graph.phiNodes) {
+                assert(phi.inputs.length == 2, "phi must has two inputs");
+                if (phi.inputs[0] == phi.inputs[1] || phi == phi.inputs[1]) {
+                    changed = true;
+                    this.mergeNodes(phi.inputs_[0], phi);
+                }
+                if (phi == phi.inputs[0]) {
+                    assert(false, "should not reach here");
+                }
+            }
+        }
+
+        for (let node of this.graph.phiNodes) {
+            this.graph.addNode(node);
+        }
+    }
+
+    mergeNodes(node: FloatingNode, phi2Del: PhiNode) {
+        let index = this.graph.phiNodes.indexOf(phi2Del);
+        if (index != -1)
+            this.graph.phiNodes.splice(index, 1);
+        else
+            assert(false, "must have this phi");
+
+        let spin:boolean = false;
+
+        let mergedInputs:FloatingNode[] = [];
+        for (let input of node.inputs) {
+            if (input == node) continue;
+            if (input == phi2Del) {
+                spin = true;
+            } else {
+                mergedInputs.push(input);
+            }
+        }
+        for (let input of phi2Del.inputs) {
+            if (input == phi2Del) continue;
+            if (input == node) {
+                continue;
+            } else {
+                mergedInputs.push(input);
+                let i = input.uses.indexOf(phi2Del);
+                if (i != -1) input.uses.splice(i, 1, node);
+            }
+        }
+        node.inputs_ = mergedInputs;
+
+        let mergedUses:IRNode[] = [];
+        for (let use of node.uses) {
+            if (use == node) continue;
+            if (use == phi2Del) {
+                continue;
+            } else {
+                mergedUses.push(use);
+            }
+        }
+        for (let use of phi2Del.uses) {
+            if (use == phi2Del) continue;
+            if (use == node) {
+                spin = true;
+            } else {
+                mergedUses.push(use);
+                let i = use.inputs.indexOf(phi2Del);
+                if (i != -1) use.inputs.splice(i, 1, node);
+            }
+        }
+        node.uses = mergedUses;
+
+        if (spin) {
+            node.inputs_.push(node);
+            node.uses.push(node);
         }
     }
 
