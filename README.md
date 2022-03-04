@@ -14,6 +14,10 @@
 
 1.  从官网下载 Node.js 并安装（包括Nodejs的包管理工具 npm）
 2.  使用npm 全局安装typescript
+3.  进入某节课程的子目录 比如第一节课 `cd 01/`
+4.  安装npm依赖 `npm i`
+5.  重新编译ts代码 `tsc`
+6.  运行 `node play.js`
 
 #### 使用说明
 
